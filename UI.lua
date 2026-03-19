@@ -4,6 +4,49 @@ ns.L = ns.L or {}
 local L = ns.L
 
 -- =========================================
+-- [全局 UI 引擎 API 暴露]
+-- =========================================
+WF.UI = WF.UI or {}
+WF.UI.Menus = {}
+WF.UI.Panels = {}
+WF.UI.CurrentNodeKey = "WF_HOME"
+
+-- [新增] 原生重载(RL)弹窗定义
+StaticPopupDialogs["WISHFLEX_RELOAD_UI"] = {
+    text = L["One or more settings require a UI reload to take effect."] or "部分设置需要重载界面(RL)才能生效。",
+    button1 = ACCEPT or "接受",
+    button2 = CANCEL or "取消",
+    OnAccept = function() ReloadUI() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+function WF.UI:ShowReloadPopup()
+    StaticPopup_Show("WISHFLEX_RELOAD_UI")
+end
+
+function WF.UI:RegisterMenu(menuData)
+    table.insert(self.Menus, menuData)
+end
+
+function WF.UI:RegisterPanel(key, renderFunc)
+    self.Panels[key] = renderFunc
+end
+
+function WF.UI:RefreshCurrentPanel()
+    if WF.ScrollChild and self.CurrentNodeKey then
+        local children = {WF.ScrollChild:GetChildren()}; for _, child in ipairs(children) do if type(child) == "table" and child.Hide then child:Hide() end end
+        local regions = {WF.ScrollChild:GetRegions()}; for _, region in ipairs(regions) do if type(region) == "table" and region.Hide then region:Hide() end end
+        if self.Panels[self.CurrentNodeKey] then
+            local y = self.Panels[self.CurrentNodeKey](WF.ScrollChild, 320)
+            WF.ScrollChild:SetHeight(math.abs(y) + 50)
+        end
+    end
+end
+
+-- =========================================
 -- [布局常量与资源预设] 
 -- =========================================
 local FRAME_WIDTH = 900
@@ -24,15 +67,17 @@ if LSM then
 else
     FontOptions = { {text = "Expressway", value = "Expressway"} }
 end
+WF.UI.FontOptions = FontOptions
 
 local AnchorOptions = {
-    { text = L["TOPLEFT"], value = "TOPLEFT" }, { text = L["TOP"], value = "TOP" }, { text = L["TOPRIGHT"], value = "TOPRIGHT" },
-    { text = L["LEFT"], value = "LEFT" }, { text = L["CENTER"], value = "CENTER" }, { text = L["RIGHT"], value = "RIGHT" },
-    { text = L["BOTTOMLEFT"], value = "BOTTOMLEFT" }, { text = L["BOTTOM"], value = "BOTTOM" }, { text = L["BOTTOMRIGHT"], value = "BOTTOMRIGHT" },
+    { text = L["TOPLEFT"] or "左上", value = "TOPLEFT" }, { text = L["TOP"] or "上方", value = "TOP" }, { text = L["TOPRIGHT"] or "右上", value = "TOPRIGHT" },
+    { text = L["LEFT"] or "左侧", value = "LEFT" }, { text = L["CENTER"] or "居中", value = "CENTER" }, { text = L["RIGHT"] or "右侧", value = "RIGHT" },
+    { text = L["BOTTOMLEFT"] or "左下", value = "BOTTOMLEFT" }, { text = L["BOTTOM"] or "下方", value = "BOTTOM" }, { text = L["BOTTOMRIGHT"] or "右下", value = "BOTTOMRIGHT" },
 }
+WF.UI.AnchorOptions = AnchorOptions
 
 -- =========================================
--- [1. 主题与颜色引擎]
+-- [主题与颜色引擎]
 -- =========================================
 local _, playerClass = UnitClass("player")
 local ClassColor = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[playerClass] or {r=1, g=1, b=1}
@@ -54,25 +99,21 @@ local function CreateUIFont(parent, size, justify, isBold)
     return text
 end
 
--- =========================================
--- [2. 高科技智能提示 (2秒自动消失)]
--- =========================================
 local function ShowTooltipTemp(owner, text, r, g, b)
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     GameTooltip:ClearLines()
     GameTooltip:AddLine(text, r or 1, g or 1, b or 1)
     GameTooltip:Show()
-    C_Timer.After(2, function()
-        if GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
-    end)
+    C_Timer.After(2, function() if GameTooltip:IsOwned(owner) then GameTooltip:Hide() end end)
 end
 
 -- =========================================
--- [3. 高科技简约组件工厂]
+-- [高科技简约组件工厂]
 -- =========================================
-local UI_Factory = {}
+WF.UI.Factory = {}
+local Factory = WF.UI.Factory
 
-function UI_Factory:CreateScrollArea(parent)
+function Factory:CreateScrollArea(parent)
     local scrollFrame = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 10, -10); scrollFrame:SetPoint("BOTTOMRIGHT", -30, 10)
     local scrollChild = CreateFrame("Frame")
@@ -81,7 +122,7 @@ function UI_Factory:CreateScrollArea(parent)
     return scrollFrame, scrollChild
 end
 
-function UI_Factory:CreateFlatButton(parent, textStr, onClick)
+function Factory:CreateFlatButton(parent, textStr, onClick)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(120, 26)
     ApplyFlatSkin(btn, 0.15, 0.15, 0.15, 1, 0, 0, 0, 1)
@@ -93,7 +134,7 @@ function UI_Factory:CreateFlatButton(parent, textStr, onClick)
     return btn
 end
 
-function UI_Factory:CreateToggle(parent, x, y, width, titleText, db, key, callback)
+function Factory:CreateToggle(parent, x, y, width, titleText, db, key, callback)
     local btn = CreateFrame("CheckButton", nil, parent)
     btn:SetSize(16, 16); btn:SetPoint("TOPLEFT", x, y); btn:SetChecked(db[key])
     ApplyFlatSkin(btn, 0.05, 0.05, 0.05, 1, 0, 0, 0, 1)
@@ -106,7 +147,7 @@ function UI_Factory:CreateToggle(parent, x, y, width, titleText, db, key, callba
 end
 
 local sliderCounter = 0
-function UI_Factory:CreateSlider(parent, x, y, width, titleText, minVal, maxVal, step, db, key, callback)
+function Factory:CreateSlider(parent, x, y, width, titleText, minVal, maxVal, step, db, key, callback)
     sliderCounter = sliderCounter + 1
     local sliderName = "WishFlexSlider_" .. key .. "_" .. sliderCounter
     local sliderWidth = width - 10
@@ -127,7 +168,7 @@ function UI_Factory:CreateSlider(parent, x, y, width, titleText, minVal, maxVal,
     return slider, y - 42
 end
 
-function UI_Factory:CreateColorPicker(parent, x, y, width, titleText, db, key, callback)
+function Factory:CreateColorPicker(parent, x, y, width, titleText, db, key, callback)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(16, 16); btn:SetPoint("TOPLEFT", x, y)
     ApplyFlatSkin(btn, 0, 0, 0, 1, 0, 0, 0, 1)
@@ -159,7 +200,7 @@ function UI_Factory:CreateColorPicker(parent, x, y, width, titleText, db, key, c
     return btn, y - 26
 end
 
-function UI_Factory:CreateDropdown(parent, x, y, width, titleText, db, key, options, callback)
+function Factory:CreateDropdown(parent, x, y, width, titleText, db, key, options, callback)
     local boxWidth = width - 10
     local title = CreateUIFont(parent, 12, "LEFT")
     title:SetPoint("TOPLEFT", x, y); title:SetText(titleText); title:SetTextColor(0.7, 0.7, 0.7)
@@ -201,7 +242,7 @@ function UI_Factory:CreateDropdown(parent, x, y, width, titleText, db, key, opti
     return btn, y - 44
 end
 
-function UI_Factory:CreateGroupHeader(parent, x, y, width, titleText, isExpanded, onClick)
+function Factory:CreateGroupHeader(parent, x, y, width, titleText, isExpanded, onClick)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(width, 26); btn:SetPoint("TOPLEFT", x, y)
     ApplyFlatSkin(btn, 0.1, 0.1, 0.1, 0.8, 0, 0, 0, 0)
@@ -226,14 +267,10 @@ function UI_Factory:CreateGroupHeader(parent, x, y, width, titleText, isExpanded
 end
 
 -- =========================================
--- [递归渲染引擎] 动态计算宽度、强制对齐缩进
+-- [递归渲染引擎 - 引入弹窗拦截] 
 -- =========================================
 local GroupState = {}
-local function ResetGroupState()
-    wipe(GroupState)
-end
-
-local function RenderOptionsGroup(parent, startX, startY, colWidth, options, onChange, level)
+function WF.UI:RenderOptionsGroup(parent, startX, startY, colWidth, options, onChange, level)
     local y = startY; level = level or 0
     local indent = level * 12
     local cx = startX + indent; local itemWidth = colWidth - indent
@@ -242,239 +279,44 @@ local function RenderOptionsGroup(parent, startX, startY, colWidth, options, onC
         if opt.type == "group" then
             if GroupState[opt.key] == nil then GroupState[opt.key] = false end
             local btn
-            btn, y = UI_Factory:CreateGroupHeader(parent, cx, y, itemWidth, opt.text, GroupState[opt.key], function()
+            btn, y = Factory:CreateGroupHeader(parent, cx, y, itemWidth, opt.text, GroupState[opt.key], function()
                 GroupState[opt.key] = not GroupState[opt.key]; onChange("UI_REFRESH")
             end)
             if GroupState[opt.key] and opt.childs then
-                y = RenderOptionsGroup(parent, startX, y - 4, colWidth, opt.childs, onChange, level + 1); y = y - 6
+                y = self:RenderOptionsGroup(parent, startX, y - 4, colWidth, opt.childs, onChange, level + 1); y = y - 6
             end
-        elseif opt.type == "toggle" then _, y = UI_Factory:CreateToggle(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, onChange)
-        elseif opt.type == "slider" then _, y = UI_Factory:CreateSlider(parent, cx + 8, y, itemWidth, opt.text, opt.min, opt.max, opt.step, opt.db, opt.key, onChange)
-        elseif opt.type == "color" then _, y = UI_Factory:CreateColorPicker(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, onChange)
-        elseif opt.type == "dropdown" then _, y = UI_Factory:CreateDropdown(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, opt.options, onChange)
+        elseif opt.type == "toggle" then 
+            -- [核心修改]：拦截回调，判断是否需要重载
+            _, y = Factory:CreateToggle(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, function(val)
+                if opt.requireReload then WF.UI:ShowReloadPopup() else if onChange then onChange(val) end end
+            end)
+        elseif opt.type == "slider" then 
+            _, y = Factory:CreateSlider(parent, cx + 8, y, itemWidth, opt.text, opt.min, opt.max, opt.step, opt.db, opt.key, function(val)
+                if opt.requireReload then WF.UI:ShowReloadPopup() else if onChange then onChange(val) end end
+            end)
+        elseif opt.type == "color" then 
+            _, y = Factory:CreateColorPicker(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, function()
+                if opt.requireReload then WF.UI:ShowReloadPopup() else if onChange then onChange() end end
+            end)
+        elseif opt.type == "dropdown" then 
+            _, y = Factory:CreateDropdown(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, opt.options, function(val)
+                if opt.requireReload then WF.UI:ShowReloadPopup() else if onChange then onChange(val) end end
+            end)
         end
     end
     return y
 end
 
-local function GetTextOptions(dbRef, prefix, titleStr, groupKey)
+function WF.UI:GetTextOptions(dbRef, prefix, titleStr, groupKey)
     return {
         type = "group", key = groupKey, text = titleStr, childs = {
-            { type = "slider", key = prefix.."FontSize", db = dbRef, min = 8, max = 64, step = 1, text = L["Font Size"] },
-            { type = "dropdown", key = prefix.."Position", db = dbRef, text = L["Anchor"], options = AnchorOptions },
-            { type = "slider", key = prefix.."XOffset", db = dbRef, min = -50, max = 50, step = 1, text = L["X Offset"] },
-            { type = "slider", key = prefix.."YOffset", db = dbRef, min = -50, max = 50, step = 1, text = L["Y Offset"] },
-            { type = "color", key = prefix.."FontColor", db = dbRef, text = L["Color"] },
+            { type = "slider", key = prefix.."FontSize", db = dbRef, min = 8, max = 64, step = 1, text = L["Font Size"] or "字体大小" },
+            { type = "dropdown", key = prefix.."Position", db = dbRef, text = L["Anchor"] or "锚点", options = AnchorOptions },
+            { type = "slider", key = prefix.."XOffset", db = dbRef, min = -50, max = 50, step = 1, text = L["X Offset"] or "X 偏移" },
+            { type = "slider", key = prefix.."YOffset", db = dbRef, min = -50, max = 50, step = 1, text = L["Y Offset"] or "Y 偏移" },
+            { type = "color", key = prefix.."FontColor", db = dbRef, text = L["Color"] or "颜色" },
         }
     }
-end
-
--- =========================================
--- [各大板块参数派发引擎]
--- =========================================
-local function RenderHomeContent(scrollChild)
-    local y = -20
-    local logo = scrollChild:CreateTexture(nil, "ARTWORK")
-    logo:SetSize(48, 48); logo:SetPoint("TOPLEFT", 20, y); logo:SetTexture(ICON_LOGO)
-    
-    local title = CreateUIFont(scrollChild, 28, "LEFT", true)
-    title:SetPoint("TOPLEFT", logo, "TOPRIGHT", 15, -5); title:SetText("|cff00ffccWishFlex|r GeniSys"); title:SetTextColor(1, 1, 1)
-    
-    local sub = CreateUIFont(scrollChild, 14, "LEFT")
-    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5); sub:SetText(L["Welcome to WishFlex"]); sub:SetTextColor(0.6, 0.6, 0.6)
-    y = y - 90
-    
-    local desc = CreateUIFont(scrollChild, 14, "LEFT")
-    desc:SetPoint("TOPLEFT", 20, y); desc:SetWidth(450)
-    desc:SetSpacing(5); desc:SetText(L["Addon Description"]); desc:SetTextColor(0.8, 0.8, 0.8)
-    y = y - 70
-    
-    local featureHead = CreateUIFont(scrollChild, 16, "LEFT", true)
-    featureHead:SetPoint("TOPLEFT", 20, y); featureHead:SetText(L["Core Features"]); featureHead:SetTextColor(CR, CG, CB)
-    y = y - 30
-    
-    local features = { L["Feature 1"], L["Feature 2"], L["Feature 3"], L["Feature 4"], L["Feature 5"] }
-    for _, fText in ipairs(features) do
-        local f = CreateUIFont(scrollChild, 13, "LEFT")
-        f:SetPoint("TOPLEFT", 30, y); f:SetText(fText); f:SetTextColor(0.7, 0.7, 0.7)
-        y = y - 22
-    end
-    y = y - 20
-    
-    local qaHead = CreateUIFont(scrollChild, 16, "LEFT", true)
-    qaHead:SetPoint("TOPLEFT", 20, y); qaHead:SetText(L["Quick Actions"]); qaHead:SetTextColor(CR, CG, CB)
-    y = y - 30
-    
-    local reloadBtn = UI_Factory:CreateFlatButton(scrollChild, L["Reload UI"], function() ReloadUI() end)
-    reloadBtn:SetPoint("TOPLEFT", 20, y)
-    local anchorBtn = UI_Factory:CreateFlatButton(scrollChild, L["Toggle Anchors"], function() if WF.ToggleMovers then WF:ToggleMovers() end end)
-    anchorBtn:SetPoint("TOPLEFT", reloadBtn, "TOPRIGHT", 15, 0)
-    y = y - 60
-    
-    local infoHead = CreateUIFont(scrollChild, 16, "LEFT", true)
-    infoHead:SetPoint("TOPLEFT", 20, y); infoHead:SetText(L["Addon Info"]); infoHead:SetTextColor(CR, CG, CB)
-    y = y - 30
-    
-    local getMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-    local version = getMeta and getMeta(AddonName, "Version") or "v1.0"
-    local author = getMeta and getMeta(AddonName, "Author") or "WishFlex Team"
-
-    local info1 = CreateUIFont(scrollChild, 13, "LEFT")
-    info1:SetPoint("TOPLEFT", 30, y); info1:SetText(L["Version"]..": |cffffffff"..version.."|r"); info1:SetTextColor(0.7, 0.7, 0.7)
-    y = y - 22
-    local info2 = CreateUIFont(scrollChild, 13, "LEFT")
-    info2:SetPoint("TOPLEFT", 30, y); info2:SetText(L["Author"]..": |cffffffff"..author.."|r"); info2:SetTextColor(0.7, 0.7, 0.7)
-    
-    y = y - 30
-    scrollChild:SetHeight(math.abs(y))
-end
-
-local RenderContentSettings
-RenderContentSettings = function(nodeKey, scrollChild)
-    local children = {scrollChild:GetChildren()}; for _, child in ipairs(children) do if type(child) == "table" and child.Hide then child:Hide() end end
-    local regions = {scrollChild:GetRegions()}; for _, region in ipairs(regions) do if type(region) == "table" and region.Hide then region:Hide() end end
-
-    if nodeKey == "WF_HOME" then RenderHomeContent(scrollChild); return end
-
-    local y = -10
-    local db = WF.db.cooldownCustom or {}
-    if not db.Essential then db.Essential = {} end
-    if not db.Utility then db.Utility = {} end
-    if not db.BuffIcon then db.BuffIcon = {} end
-    if not db.BuffBar then db.BuffBar = {} end
-
-    local function HandleCDChange(val)
-        if WF.TriggerCooldownLayout then WF.TriggerCooldownLayout() end
-        if val == "UI_REFRESH" then RenderContentSettings(nodeKey, scrollChild) end
-    end
-    local function HandleGlowChange(val)
-        if WF.GlowAPI and WF.GlowAPI.UpdateAllGlows then WF.GlowAPI:UpdateAllGlows() end
-        if val == "UI_REFRESH" then RenderContentSettings(nodeKey, scrollChild) end
-    end
-
-    local ColW = 320 
-
-    if nodeKey == "cooldownCustom_Global" then
-        local opts = {
-            { type = "group", key = "cd_global_base", text = L["Global Settings"], childs = {
-                { type = "toggle", key = "enable", db = db, text = L["Enable Module"] },
-                { type = "dropdown", key = "countFont", db = db, text = L["Global Font"], options = FontOptions },
-                { type = "color", key = "swipeColor", db = db, text = L["Default Swipe Color"] },
-                { type = "color", key = "activeAuraColor", db = db, text = L["Active Swipe Color"] },
-                { type = "toggle", key = "reverseSwipe", db = db, text = L["Reverse Swipe"] },
-                { type = "toggle", key = "enableCustomLayout", db = db.Essential, text = L["Enable Split Layout"] },
-                { type = "slider", key = "rowYGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Row Y Gap"] },
-            }}
-        }
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 2, opts, HandleCDChange)
-
-    elseif nodeKey == "cooldownCustom_Glow" then
-        local glowDB = WF.db.glow or {}
-        local glowOpts = {
-            { type = "group", key = "cd_glow", text = L["Glow Settings"], childs = {
-                { type = "toggle", key = "enable", db = glowDB, text = L["Enable"] },
-                { type = "dropdown", key = "glowType", db = glowDB, text = L["Glow Style"], options = {
-                    {text = L["Pixel"], value="pixel"}, {text = L["Autocast"], value="autocast"}, {text = L["Button"], value="button"}, {text = L["Proc"], value="proc"}
-                }},
-                { type = "toggle", key = "useCustomColor", db = glowDB, text = L["Enable Custom Color"] },
-                { type = "color", key = "color", db = glowDB, text = L["Color"] },
-            }}
-        }
-        local childs = glowOpts[1].childs
-        if glowDB.glowType == "pixel" then
-            table.insert(childs, { type = "slider", key = "pixelLines", db = glowDB, min = 1, max = 20, step = 1, text = L["Lines"] })
-            table.insert(childs, { type = "slider", key = "pixelFrequency", db = glowDB, min = -2, max = 2, step = 0.05, text = L["Frequency"] })
-            table.insert(childs, { type = "slider", key = "pixelLength", db = glowDB, min = 0, max = 50, step = 1, text = L["Length"] })
-            table.insert(childs, { type = "slider", key = "pixelThickness", db = glowDB, min = 1, max = 10, step = 1, text = L["Thickness"] })
-            table.insert(childs, { type = "slider", key = "pixelXOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["X Offset"] })
-            table.insert(childs, { type = "slider", key = "pixelYOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["Y Offset"] })
-        elseif glowDB.glowType == "autocast" then
-            table.insert(childs, { type = "slider", key = "autocastParticles", db = glowDB, min = 1, max = 20, step = 1, text = L["Particles"] })
-            table.insert(childs, { type = "slider", key = "autocastFrequency", db = glowDB, min = -2, max = 2, step = 0.05, text = L["Frequency"] })
-            table.insert(childs, { type = "slider", key = "autocastScale", db = glowDB, min = 0.5, max = 3, step = 0.1, text = L["Scale"] })
-            table.insert(childs, { type = "slider", key = "autocastXOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["X Offset"] })
-            table.insert(childs, { type = "slider", key = "autocastYOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["Y Offset"] })
-        elseif glowDB.glowType == "button" then
-            table.insert(childs, { type = "slider", key = "buttonFrequency", db = glowDB, min = 0, max = 2, step = 0.05, text = L["Frequency"] })
-        elseif glowDB.glowType == "proc" then
-            table.insert(childs, { type = "slider", key = "procDuration", db = glowDB, min = 0.1, max = 5, step = 0.1, text = L["Duration"] })
-            table.insert(childs, { type = "slider", key = "procXOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["X Offset"] })
-            table.insert(childs, { type = "slider", key = "procYOffset", db = glowDB, min = -30, max = 30, step = 1, text = L["Y Offset"] })
-        end
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 2, glowOpts, HandleGlowChange)
-
-    elseif nodeKey == "cooldownCustom_Essential" then
-        local leftOpts = {
-            { type = "group", key = "ess_row1", text = L["Row 1 Settings"], childs = {
-                { type = "slider", key = "maxPerRow", db = db.Essential, min = 1, max = 20, step = 1, text = L["Max Per Row"] },
-                { type = "slider", key = "iconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] },
-                { type = "slider", key = "row1Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] },
-                { type = "slider", key = "row1Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] },
-                GetTextOptions(db.Essential, "row1Stack", L["Stack Text"], "ess_row1_stack"),
-                GetTextOptions(db.Essential, "row1Cd", L["CD Text"], "ess_row1_cd"),
-            }}
-        }
-        local rightOpts = {
-            { type = "group", key = "ess_row2", text = L["Row 2 Settings"], childs = {
-                { type = "slider", key = "row2IconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] },
-                { type = "slider", key = "row2Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] },
-                { type = "slider", key = "row2Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] },
-                GetTextOptions(db.Essential, "row2Stack", L["Stack Text"], "ess_row2_stack"),
-                GetTextOptions(db.Essential, "row2Cd", L["CD Text"], "ess_row2_cd"),
-            }}
-        }
-        local ly = RenderOptionsGroup(scrollChild, 15, y, ColW, leftOpts, HandleCDChange)
-        local ry = RenderOptionsGroup(scrollChild, 335, y, ColW, rightOpts, HandleCDChange)
-        y = math.min(ly, ry)
-
-    elseif nodeKey == "cooldownCustom_Utility" then
-        local opts = {
-            { type = "group", key = "util_base", text = L["Utility Skills"], childs = {
-                { type = "toggle", key = "attachToPlayer", db = db.Utility, text = L["Attach To Player"] },
-                { type = "slider", key = "iconGap", db = db.Utility, min = 0, max = 50, step = 1, text = L["Icon Gap"] },
-                { type = "slider", key = "width", db = db.Utility, min = 10, max = 100, step = 1, text = L["Width"] },
-                { type = "slider", key = "height", db = db.Utility, min = 10, max = 100, step = 1, text = L["Height"] },
-                GetTextOptions(db.Utility, "stack", L["Stack Text"], "util_stack"),
-                GetTextOptions(db.Utility, "cd", L["CD Text"], "util_cd"),
-            }}
-        }
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, opts, HandleCDChange)
-
-    elseif nodeKey == "cooldownCustom_BuffIcon" then
-        local opts = {
-            { type = "group", key = "icon_base", text = L["Buff Icons"], childs = {
-                { type = "slider", key = "width", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Width"] },
-                { type = "slider", key = "height", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Height"] },
-                { type = "slider", key = "iconGap", db = db.BuffIcon, min = 0, max = 30, step = 1, text = L["Icon Gap"] },
-                GetTextOptions(db.BuffIcon, "stack", L["Stack Text"], "icon_stack"),
-                GetTextOptions(db.BuffIcon, "cd", L["CD Text"], "icon_cd"),
-            }}
-        }
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, opts, HandleCDChange)
-
-    elseif nodeKey == "cooldownCustom_BuffBar" then
-        local opts = {
-            { type = "group", key = "bar_base", text = L["Buff Bars"], childs = {
-                { type = "slider", key = "width", db = db.BuffBar, min = 50, max = 400, step = 1, text = L["Width"] },
-                { type = "slider", key = "height", db = db.BuffBar, min = 10, max = 100, step = 1, text = L["Height"] },
-                { type = "slider", key = "iconGap", db = db.BuffBar, min = 0, max = 30, step = 1, text = L["Icon Gap"] },
-                GetTextOptions(db.BuffBar, "stack", L["Stack Text"], "bar_stack"),
-                GetTextOptions(db.BuffBar, "cd", L["CD Text"], "bar_cd"),
-            }}
-        }
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, opts, HandleCDChange)
-        
-    elseif nodeKey == "classResource" then
-        local rcDB = WF.db.classResource or {}
-        local opts = {
-            { type = "group", key = "classResource", text = L["Class Resource"], childs = {
-                { type = "toggle", key = "enable", db = rcDB, text = L["Enable Module"] },
-                { type = "slider", key = "width", db = rcDB, min = 100, max = 500, step = 1, text = L["Width"] },
-            }}
-        }
-        y = RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, opts, function() if WF.ClassResourceAPI then WF.ClassResourceAPI:UpdateLayout() end end)
-    end
-    scrollChild:SetHeight(math.abs(y) + 50)
 end
 
 -- =========================================
@@ -495,25 +337,29 @@ local function WF_AnimateRotation(texture, targetRad, duration)
 end
 
 -- =========================================
--- [树状展开菜单引擎] (无记忆，每次重置)
+-- [动态菜单树状构造引擎]
 -- =========================================
 local menuExpanded = {}
-local function ResetMenuState()
-    wipe(menuExpanded)
+local function BuildMenuTree()
+    local tree = {}; local map = {}
+    for _, item in ipairs(WF.UI.Menus) do item.childs = {}; map[item.id] = item end
+    for _, item in ipairs(WF.UI.Menus) do
+        if item.parent and map[item.parent] then table.insert(map[item.parent].childs, item) else table.insert(tree, item) end
+    end
+    
+    local function sortTree(node)
+        table.sort(node, function(a, b) return (a.order or 99) < (b.order or 99) end)
+        for _, child in ipairs(node) do sortTree(child.childs) end
+    end
+    sortTree(tree)
+    
+    local flat = {}
+    local function flatten(node, lvl)
+        for _, item in ipairs(node) do item.level = lvl; table.insert(flat, item); flatten(item.childs, lvl + 1) end
+    end
+    flatten(tree, 0)
+    return flat
 end
-
-local menuStructure = {
-{ id = "HOME", level = 0, name = L["Home"], type = "root", key = "WF_HOME", icon = "Interface\\AddOns\\WishFlex\\Media\\Icons\\home" },
-{ id = "Combat", level = 0, name = L["Combat"], type = "root", icon = "Interface\\AddOns\\WishFlex\\Media\\Icons\\zd" },
-    { id = "Resource", parent = "Combat", level = 1, name = L["Class Resource"], key = "classResource" },
-    { id = "CDManager", parent = "Combat", level = 1, name = L["Cooldown Manager"], type = "group" },
-    { id = "CD_Global", parent = "CDManager", level = 2, name = L["Global Settings"], key = "cooldownCustom_Global" },
-    { id = "CD_Glow", parent = "CDManager", level = 2, name = L["Core Glow"], key = "cooldownCustom_Glow" },
-    { id = "CD_Essential", parent = "CDManager", level = 2, name = L["Essential Skills"], key = "cooldownCustom_Essential" },
-    { id = "CD_Utility", parent = "CDManager", level = 2, name = L["Utility Skills"], key = "cooldownCustom_Utility" },
-    { id = "CD_BuffIcon", parent = "CDManager", level = 2, name = L["Buff Icons"], key = "cooldownCustom_BuffIcon" },
-    { id = "CD_BuffBar", parent = "CDManager", level = 2, name = L["Buff Bars"], key = "cooldownCustom_BuffBar" },
-}
 
 local function RenderTreeMenu()
     local sidebar = WF.MainFrame.Sidebar; local isExpanded = sidebar.isExpanded
@@ -527,6 +373,8 @@ local function RenderTreeMenu()
         activeIndicator:SetWidth(3); activeIndicator:SetColorTexture(CR, CG, CB, 1)
         sidebar.activeIndicator = activeIndicator
     end
+
+    local currentMenu = BuildMenuTree()
 
     local function AddBtn(item)
         local btn = CreateFrame("Button", nil, sidebar, "BackdropTemplate")
@@ -565,19 +413,13 @@ local function RenderTreeMenu()
 
         btn:SetScript("OnClick", function()
             PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-            
-            -- 如果点击的是文件夹，切换它的展开状态
-            if item.type == "root" or item.type == "group" then
-                menuExpanded[item.id] = not menuExpanded[item.id]
-            end
+            if item.type == "root" or item.type == "group" then menuExpanded[item.id] = not menuExpanded[item.id] end
 
-            -- 点击图标不仅能打开页面，还要强制展开侧边栏
             if not sidebar.isExpanded then
                 sidebar.isExpanded = true; sidebar:SetWidth(SIDEBAR_WIDTH_EXPANDED)
                 if sidebar.mIcon then WF_AnimateRotation(sidebar.mIcon, -math.pi/2, 0.2) end
             end
 
-            -- 渲染对应的设置内容
             if item.key then
                 for _, b in ipairs(sidebar.buttons) do 
                     if b.tIcon then b.tIcon:SetVertexColor(0.6, 0.6, 0.6, 1) end
@@ -585,7 +427,9 @@ local function RenderTreeMenu()
                 end
                 text:SetTextColor(1, 1, 1); if btn.tIcon then btn.tIcon:SetVertexColor(CR, CG, CB, 1) end
                 activeIndicator:ClearAllPoints(); activeIndicator:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0); activeIndicator:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0); activeIndicator:Show()
-                RenderContentSettings(item.key, WF.ScrollChild)
+                
+                WF.UI.CurrentNodeKey = item.key
+                WF.UI:RefreshCurrentPanel()
                 WF.MainFrame.TitleBar.titleText:SetText("|cffffffffW|cff00ffccF|r // "..item.name)
             end
             
@@ -606,10 +450,10 @@ local function RenderTreeMenu()
         yOffset = yOffset - 30
     end
 
-    for _, item in ipairs(menuStructure) do
+    for _, item in ipairs(currentMenu) do
         if item.type == "root" then AddBtn(item)
         elseif isExpanded and item.parent and menuExpanded[item.parent] then
-            local pNode = nil; for _, n in ipairs(menuStructure) do if n.id == item.parent then pNode = n; break end end
+            local pNode = nil; for _, n in ipairs(currentMenu) do if n.id == item.parent then pNode = n; break end end
             if pNode and (pNode.type == "root" or (pNode.parent and menuExpanded[pNode.parent])) then AddBtn(item) end
         end
     end
@@ -643,7 +487,7 @@ function WF:ToggleUI()
         mIcon:SetSize(16, 16); mIcon:SetPoint("CENTER"); mIcon:SetTexture(ICON_ARROW); mIcon:SetVertexColor(CR, CG, CB, 1)
         sidebar.mIcon = mIcon
         
-        menuBtn:SetScript("OnEnter", function() if not sidebar.isExpanded then ShowTooltipTemp(menuBtn, L["MENU"], CR, CG, CB) end end)
+        menuBtn:SetScript("OnEnter", function() if not sidebar.isExpanded then ShowTooltipTemp(menuBtn, L["MENU"] or "菜单", CR, CG, CB) end end)
         menuBtn:SetScript("OnLeave", function() if GameTooltip:IsOwned(menuBtn) then GameTooltip:Hide() end end)
         menuBtn:SetScript("OnClick", function()
             sidebar.isExpanded = not sidebar.isExpanded
@@ -667,27 +511,20 @@ function WF:ToggleUI()
 
         local content = CreateFrame("Frame", nil, frame, "BackdropTemplate")
         content:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 0, 0); content:SetPoint("BOTTOMRIGHT", -1, 1); content:SetFrameLevel(frame:GetFrameLevel() + 1)
-        local scrollFrame, scrollChild = UI_Factory:CreateScrollArea(content)
+        local scrollFrame, scrollChild = Factory:CreateScrollArea(content)
         content.scrollFrame = scrollFrame; content.scrollChild = scrollChild
         frame.Content = content
         WF.ScrollChild = scrollChild
     end
     
     if not WF.MainFrame:IsShown() then
-        -- [强迫症福音]：每次打开界面，强制重置所有状态并全折叠
-        ResetGroupState()
-        ResetMenuState()
-        
+        wipe(GroupState); wipe(menuExpanded)
         local sidebar = WF.MainFrame.Sidebar
-        sidebar.isExpanded = false
-        if WF.db.global and WF.db.global.ui then WF.db.global.ui.sidebarExpanded = false end
-        
-        sidebar:SetWidth(SIDEBAR_WIDTH_COLLAPSED)
+        sidebar.isExpanded = false; sidebar:SetWidth(SIDEBAR_WIDTH_COLLAPSED)
         if sidebar.mIcon then sidebar.mIcon:SetRotation(0) end
 
         RenderTreeMenu()
         
-        -- 静默渲染主页 (避免调用 :Click() 触发自动展开逻辑)
         local firstBtn = sidebar.buttons[1]
         if firstBtn then
             for _, b in ipairs(sidebar.buttons) do 
@@ -704,10 +541,10 @@ function WF:ToggleUI()
                 sidebar.activeIndicator:Show()
             end
             
-            RenderContentSettings("WF_HOME", WF.ScrollChild)
-            WF.MainFrame.TitleBar.titleText:SetText("|cffffffffW|cff00ffccF|r // "..L["Home"])
+            WF.UI.CurrentNodeKey = "WF_HOME"
+            WF.UI:RefreshCurrentPanel()
+            WF.MainFrame.TitleBar.titleText:SetText("|cffffffffW|cff00ffccF|r // "..(L["Home"] or "首页"))
         end
-        
         WF.MainFrame:Show()
     else
         WF.MainFrame:Hide()

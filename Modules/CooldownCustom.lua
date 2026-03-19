@@ -21,6 +21,111 @@ local DefaultConfig = {
     Essential = { enableCustomLayout = true, maxPerRow = 7, iconGap = 2, rowYGap = 2, row1Width = 45, row1Height = 45, row1CdFontSize = 18, row1CdFontColor = DEFAULT_CD_COLOR, row1CdPosition = "CENTER", row1CdXOffset = 0, row1CdYOffset = 0, row1StackFontSize = 14, row1StackFontColor = DEFAULT_STACK_COLOR, row1StackPosition = "BOTTOMRIGHT", row1StackXOffset = 0, row1StackYOffset = 0, row2Width = 40, row2Height = 40, row2IconGap = 2, row2CdFontSize = 18, row2CdFontColor = DEFAULT_CD_COLOR, row2CdPosition = "CENTER", row2CdXOffset = 0, row2CdYOffset = 0, row2StackFontSize = 14, row2StackFontColor = DEFAULT_STACK_COLOR, row2StackPosition = "BOTTOMRIGHT", row2StackXOffset = 0, row2StackYOffset = 0 }
 }
 
+-- ========================================================
+-- [完美像素引擎 VFlow 同款] 
+-- ========================================================
+local function GetOnePixelSize()
+    local screenHeight = select(2, GetPhysicalScreenSize())
+    if not screenHeight or screenHeight == 0 then return 1 end
+    local uiScale = UIParent:GetEffectiveScale()
+    if not uiScale or uiScale == 0 then return 1 end
+    return 768.0 / screenHeight / uiScale
+end
+
+local function PixelSnap(value)
+    if not value then return 0 end
+    local onePixel = GetOnePixelSize()
+    if onePixel == 0 then return value end
+    return math.floor(value / onePixel + 0.5) * onePixel
+end
+
+local function CreateBorderTex(parent, layer, subLevel)
+    local tex = parent:CreateTexture(nil, layer, nil, subLevel)
+    tex:SetTexture("Interface\\Buttons\\WHITE8x8")
+    if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
+    if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
+    return tex
+end
+
+local function AddElvUIBorder(frame)
+    if not frame then return end
+    if frame.backdrop then frame.backdrop:SetAlpha(0) end
+
+    local m = GetOnePixelSize()
+    local anchorTarget = (frame.Icon and (frame.Icon.Icon or frame.Icon)) or frame
+    
+    if not frame.wishBorder then
+        local border = CreateFrame("Frame", nil, frame)
+        border:SetAllPoints(anchorTarget)
+        border:SetFrameLevel(frame:GetFrameLevel() + 1) 
+
+        local top = CreateBorderTex(border, "OVERLAY", 7)
+        top:SetColorTexture(0, 0, 0, 1)
+        top:SetPoint("TOPLEFT", border, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", border, "TOPRIGHT", 0, 0)
+        top:SetHeight(m)
+
+        local bottom = CreateBorderTex(border, "OVERLAY", 7)
+        bottom:SetColorTexture(0, 0, 0, 1)
+        bottom:SetPoint("BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(m)
+
+        local left = CreateBorderTex(border, "OVERLAY", 7)
+        left:SetColorTexture(0, 0, 0, 1)
+        left:SetPoint("TOPLEFT", border, "TOPLEFT", 0, -m)
+        left:SetPoint("BOTTOMLEFT", border, "BOTTOMLEFT", 0, m)
+        left:SetWidth(m)
+
+        local right = CreateBorderTex(border, "OVERLAY", 7)
+        right:SetColorTexture(0, 0, 0, 1)
+        right:SetPoint("TOPRIGHT", border, "TOPRIGHT", 0, -m)
+        right:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, m)
+        right:SetWidth(m)
+
+        frame.wishBorder = border
+    end
+    
+    if frame.Icon then
+        local tex = frame.Icon.Icon or frame.Icon
+        if type(tex) == "table" and tex.SetDrawLayer then tex:SetDrawLayer("ARTWORK", 1) end
+    end
+
+    if frame.Bar then
+        if not frame.wishBarBorder then
+            local barBorder = CreateFrame("Frame", nil, frame.Bar)
+            barBorder:SetAllPoints(frame.Bar)
+            barBorder:SetFrameLevel(frame.Bar:GetFrameLevel() + 1)
+
+            local top = CreateBorderTex(barBorder, "OVERLAY", 7)
+            top:SetColorTexture(0, 0, 0, 1)
+            top:SetPoint("TOPLEFT", barBorder, "TOPLEFT", 0, 0)
+            top:SetPoint("TOPRIGHT", barBorder, "TOPRIGHT", 0, 0)
+            top:SetHeight(m)
+
+            local bottom = CreateBorderTex(barBorder, "OVERLAY", 7)
+            bottom:SetColorTexture(0, 0, 0, 1)
+            bottom:SetPoint("BOTTOMLEFT", barBorder, "BOTTOMLEFT", 0, 0)
+            bottom:SetPoint("BOTTOMRIGHT", barBorder, "BOTTOMRIGHT", 0, 0)
+            bottom:SetHeight(m)
+
+            local left = CreateBorderTex(barBorder, "OVERLAY", 7)
+            left:SetColorTexture(0, 0, 0, 1)
+            left:SetPoint("TOPLEFT", barBorder, "TOPLEFT", 0, -m)
+            left:SetPoint("BOTTOMLEFT", barBorder, "BOTTOMLEFT", 0, m)
+            left:SetWidth(m)
+
+            local right = CreateBorderTex(barBorder, "OVERLAY", 7)
+            right:SetColorTexture(0, 0, 0, 1)
+            right:SetPoint("TOPRIGHT", barBorder, "TOPRIGHT", 0, -m)
+            right:SetPoint("BOTTOMRIGHT", barBorder, "BOTTOMRIGHT", 0, m)
+            right:SetWidth(m)
+
+            frame.wishBarBorder = barBorder
+        end
+    end
+end
+
 local function WeldToMover(frame, anchorFrame)
     if frame and anchorFrame then frame:ClearAllPoints(); frame:SetPoint("CENTER", anchorFrame, "CENTER") end
 end
@@ -67,76 +172,20 @@ local function ShouldHideFrame(info)
     return false
 end
 
--- ========================================================
--- [VFlow 核心代码] 精准死锁暴雪高亮，并替换为我们的发光引擎
--- ========================================================
 local function SetupFrameGlow(frame)
     if not frame then return end
     if frame.SpellActivationAlert and not frame._wf_glowHooked then
         frame._wf_glowHooked = true
-        frame.SpellActivationAlert:SetAlpha(0) -- 永久隐身
-        
-        -- 当暴雪想要高亮时，拦截并播放我们的 LCG 特效
+        frame.SpellActivationAlert:SetAlpha(0) 
         hooksecurefunc(frame.SpellActivationAlert, "Show", function(self)
-            self:SetAlpha(0)
-            if WF.GlowAPI then WF.GlowAPI:Show(frame) end
+            self:SetAlpha(0); if WF.GlowAPI then WF.GlowAPI:Show(frame) end
         end)
         hooksecurefunc(frame.SpellActivationAlert, "Hide", function(self)
             if WF.GlowAPI then WF.GlowAPI:Hide(frame) end
         end)
-        
-        -- 进游戏时如果已经是高亮状态，则立刻应用
         if frame.SpellActivationAlert:IsShown() then
             if WF.GlowAPI then WF.GlowAPI:Show(frame) end
         end
-    end
-end
-
--- ========================================================
--- [核心修正] 安全的 1px 细黑边框引擎，去除 Backdrop 依赖
--- ========================================================
-local function AddElvUIBorder(frame)
-    if not frame then return end
-    if frame.backdrop then frame.backdrop:SetAlpha(0) end
-
-    local anchorTarget = (frame.Icon and (frame.Icon.Icon or frame.Icon)) or frame
-    if not frame.wishBorder then
-        local border = CreateFrame("Frame", nil, frame)
-        border:SetPoint("TOPLEFT", anchorTarget, "TOPLEFT", -1, 1)
-        border:SetPoint("BOTTOMRIGHT", anchorTarget, "BOTTOMRIGHT", 1, -1)
-        border:SetFrameLevel(frame:GetFrameLevel()) 
-
-        local bg = border:CreateTexture(nil, "BACKGROUND", nil, -7)
-        bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 1)
-
-        local inner = border:CreateTexture(nil, "BACKGROUND", nil, -6)
-        inner:SetPoint("TOPLEFT", border, "TOPLEFT", 1, -1)
-        inner:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", -1, 1)
-        inner:SetColorTexture(0.05, 0.05, 0.05, 0.9)
-
-        frame.wishBorder = border
-    end
-    
-    if frame.Icon then
-        local tex = frame.Icon.Icon or frame.Icon
-        if type(tex) == "table" and tex.SetDrawLayer then tex:SetDrawLayer("ARTWORK", 1) end
-    end
-
-    if frame.Bar and not frame.wishBarBorder then
-        local barBorder = CreateFrame("Frame", nil, frame.Bar)
-        barBorder:SetPoint("TOPLEFT", frame.Bar, "TOPLEFT", -1, 1)
-        barBorder:SetPoint("BOTTOMRIGHT", frame.Bar, "BOTTOMRIGHT", 1, -1)
-        barBorder:SetFrameLevel(frame.Bar:GetFrameLevel())
-        
-        local bg = barBorder:CreateTexture(nil, "BACKGROUND", nil, -7)
-        bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 1)
-
-        local inner = barBorder:CreateTexture(nil, "BACKGROUND", nil, -6)
-        inner:SetPoint("TOPLEFT", barBorder, "TOPLEFT", 1, -1)
-        inner:SetPoint("BOTTOMRIGHT", barBorder, "BOTTOMRIGHT", -1, 1)
-        inner:SetColorTexture(0.05, 0.05, 0.05, 0.9)
-
-        frame.wishBarBorder = barBorder
     end
 end
 
@@ -175,13 +224,10 @@ function CDMod:ApplySwipeSettings(frame)
     local db = WF.db.cooldownCustom; 
     local rev = db.reverseSwipe; if rev == nil then rev = true end
     frame.Cooldown:SetReverse(rev)
-    
-    -- 强行用 WHITE8x8 纯色材质覆盖暴雪带内缩和透明圆角的冷却材质，实现 100% 无缝贴满！
     frame.Cooldown:SetDrawEdge(false)
     frame.Cooldown:SetDrawBling(false)
     frame.Cooldown:SetUseCircularEdge(false)
     frame.Cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8x8")
-    
     local anchor = (frame.Icon and (frame.Icon.Icon or frame.Icon)) or frame
     frame.Cooldown:ClearAllPoints()
     frame.Cooldown:SetAllPoints(anchor)
@@ -220,20 +266,20 @@ function CDMod:ImmediateStyleFrame(frame, category)
     SuppressDebuffBorder(frame); self:ApplyText(frame, category, 1); self:ApplySwipeSettings(frame)
     local db = WF.db.cooldownCustom; local cfg = db[category]
     if cfg then 
-        local w = cfg.width or cfg.row1Width or 45; local h = cfg.height or cfg.row1Height or 45; 
+        local w = PixelSnap(cfg.width or cfg.row1Width or 45)
+        local h = PixelSnap(cfg.height or cfg.row1Height or 45)
         frame:SetSize(w, h); 
         if frame.Icon then 
             local iconObj = frame.Icon.Icon or frame.Icon; CDMod.ApplyTexCoord(iconObj, w, h); 
             if frame.Bar then 
-                frame.Icon:SetSize(h, h); local gap = cfg.iconGap or 2; 
+                local gap = PixelSnap(cfg.iconGap or 2)
+                frame.Icon:SetSize(h, h); 
                 frame.Bar:SetSize(math.max(1, w - h - gap), h); 
                 frame.Bar:ClearAllPoints(); frame.Bar:SetPoint("LEFT", frame.Icon, "RIGHT", gap, 0) 
             end 
         end 
     end
     AddElvUIBorder(frame)
-    
-    -- [重要！] 在这里执行高亮死锁和发光挂钩
     SetupFrameGlow(frame)
 end
 
@@ -241,11 +287,19 @@ local cachedIcons = {}; local cachedFrames = {}; local cachedR1 = {}; local cach
 local function DoLayoutBuffs(viewerName, key, isVertical)
     local db = WF.db.cooldownCustom; local container = _G[viewerName]; if not container or not container:IsShown() then return end
     local targetAnchor = _G["WishFlex_Anchor_"..key]
-    WeldToMover(container, targetAnchor) 
+    
+    if targetAnchor then WeldToMover(container, targetAnchor) end
+    
     wipe(cachedIcons); local count = 0
     if container.itemFramePool then for f in container.itemFramePool:EnumerateActive() do if f:IsShown() then if ShouldHideFrame(f.cooldownInfo) then PhysicalHideFrame(f) else if f._wishFlexHidden then f._wishFlexHidden = false; f:SetAlpha(1); if f.Icon then f.Icon:SetAlpha(1) end; f:EnableMouse(true) end; count = count + 1; cachedIcons[count] = f; SuppressDebuffBorder(f); CDMod:ApplyText(f, key); CDMod:ApplySwipeSettings(f) end end end end 
     if count == 0 then return end; table.sort(cachedIcons, SortByLayoutIndex)
-    local cfg = db[key]; local w, h, gap = cfg.width or 45, cfg.height or 45, cfg.iconGap or 2; local growth = cfg.growth or (isVertical and "DOWN" or "CENTER_HORIZONTAL")
+    
+    local cfg = db[key]; 
+    local w = PixelSnap(cfg.width or 45)
+    local h = PixelSnap(cfg.height or 45)
+    local gap = PixelSnap(cfg.iconGap or 2)
+    local growth = cfg.growth or (isVertical and "DOWN" or "CENTER_HORIZONTAL")
+    
     local totalW = (count * w) + math.max(0, (count - 1) * gap); local totalH = (count * h) + math.max(0, (count - 1) * gap)
     
     container:SetSize(math.max(1, isVertical and w or totalW), math.max(1, isVertical and totalH or h))
@@ -263,7 +317,6 @@ end
 
 function CDMod:ForceBuffsLayout() DoLayoutBuffs("BuffIconCooldownViewer", "BuffIcon", false); DoLayoutBuffs("BuffBarCooldownViewer", "BuffBar", true) end
 
--- 供 UI 调用的全局发光刷新函数
 WF.UpdateCooldownGlows = function()
     local viewers = { _G.UtilityCooldownViewer, _G.EssentialCooldownViewer, _G.BuffIconCooldownViewer, _G.BuffBarCooldownViewer }
     for _, viewer in ipairs(viewers) do
@@ -285,7 +338,8 @@ function CDMod:UpdateAllLayouts()
     local function LayoutViewer(viewer, cfg, cat)
         if not viewer or not viewer.itemFramePool then return end
         local targetAnchor = _G["WishFlex_Anchor_"..cat]; local attachToPlayer = (cat == "Utility" and cfg.attachToPlayer)
-        if not attachToPlayer then WeldToMover(viewer, targetAnchor) end
+        
+        if not attachToPlayer and targetAnchor then WeldToMover(viewer, targetAnchor) end
         
         wipe(cachedFrames); local count = 0
         for f in viewer.itemFramePool:EnumerateActive() do 
@@ -296,7 +350,12 @@ function CDMod:UpdateAllLayouts()
             end 
         end
         if count == 0 then return end; table.sort(cachedFrames, SortByLayoutIndex)
-        local w, h, gap = cfg.width or 45, cfg.height or 30, cfg.iconGap or 2; local growth = attachToPlayer and "LEFT" or (cfg.growth or "CENTER_HORIZONTAL"); local totalW = (count * w) + math.max(0, (count - 1) * gap)
+        
+        local w = PixelSnap(cfg.width or 45)
+        local h = PixelSnap(cfg.height or 30)
+        local gap = PixelSnap(cfg.iconGap or 2)
+        
+        local growth = attachToPlayer and "LEFT" or (cfg.growth or "CENTER_HORIZONTAL"); local totalW = (count * w) + math.max(0, (count - 1) * gap)
         
         viewer:SetSize(math.max(1, totalW), math.max(1, h))
         if not attachToPlayer and targetAnchor then targetAnchor:SetSize(viewer:GetSize()); if targetAnchor.mover then targetAnchor.mover:SetSize(targetAnchor:GetSize()) end end
@@ -319,7 +378,9 @@ function CDMod:UpdateAllLayouts()
     local eViewer = _G.EssentialCooldownViewer
     if eViewer and eViewer.itemFramePool then
         local targetAnchor = _G["WishFlex_Anchor_Essential"]
-        WeldToMover(eViewer, targetAnchor)
+        
+        if targetAnchor then WeldToMover(eViewer, targetAnchor) end
+        
         wipe(cachedFrames); local count = 0
         for f in eViewer.itemFramePool:EnumerateActive() do 
             if f:IsShown() then 
@@ -335,27 +396,39 @@ function CDMod:UpdateAllLayouts()
                 wipe(cachedR1); wipe(cachedR2); local r1c, r2c = 0, 0
                 for i = 1, count do local f = cachedFrames[i]; if i <= cfgE.maxPerRow then r1c = r1c + 1; cachedR1[r1c] = f else r2c = r2c + 1; cachedR2[r2c] = f end end
                 
-                local w1, h1, gap = cfgE.row1Width or 45, cfgE.row1Height or 45, cfgE.iconGap or 2
+                local w1 = PixelSnap(cfgE.row1Width or 45)
+                local h1 = PixelSnap(cfgE.row1Height or 45)
+                local gap = PixelSnap(cfgE.iconGap or 2)
+                
                 local totalW1 = (r1c * w1) + math.max(0, (r1c - 1) * gap); local startX1 = -(totalW1 / 2) + (w1 / 2)
                 eViewer:SetSize(math.max(1, totalW1), math.max(1, h1))
                 if targetAnchor then targetAnchor:SetSize(math.max(1, totalW1), math.max(1, h1)); if targetAnchor.mover then targetAnchor.mover:SetSize(targetAnchor:GetSize()) end end
 
                 for i = 1, r1c do 
                     local f = cachedR1[i]
-                    f:ClearAllPoints(); f:SetPoint("CENTER", targetAnchor, "CENTER", startX1 + (i - 1) * (w1 + gap), 0); f:SetSize(w1, h1); if f.Icon then CDMod.ApplyTexCoord(f.Icon.Icon or f.Icon, w1, h1) end
+                    f:ClearAllPoints()
+                    local xOff = startX1 + (i - 1) * (w1 + gap)
+                    if targetAnchor then f:SetPoint("CENTER", targetAnchor, "CENTER", xOff, 0) else f:SetPoint("CENTER", eViewer, "CENTER", xOff, 0) end
+                    f:SetSize(w1, h1); if f.Icon then CDMod.ApplyTexCoord(f.Icon.Icon or f.Icon, w1, h1) end
                     SuppressDebuffBorder(f); self:ApplyText(f, "Essential", 1); self:ApplySwipeSettings(f); AddElvUIBorder(f); SetupFrameGlow(f)
                 end
                 
                 local r2Anchor = _G["WishFlex_Anchor_EssentialR2"]
-                WeldToMover(r2Anchor, r2Anchor.mover)
-                local w2, h2, gap2 = cfgE.row2Width or 40, cfgE.row2Height or 40, cfgE.row2IconGap or 2
-                local totalW2 = (r2c * w2) + math.max(0, (r2c - 1) * gap2); local startX2 = -(totalW2 / 2) + (w2 / 2)
-                r2Anchor:SetSize(math.max(1, totalW2), math.max(1, h2)); if r2Anchor.mover then r2Anchor.mover:SetSize(r2Anchor:GetSize()) end
-                
-                for i = 1, r2c do 
-                    local f = cachedR2[i]
-                    f:ClearAllPoints(); f:SetPoint("CENTER", r2Anchor, "CENTER", startX2 + (i - 1) * (w2 + gap2), 0); f:SetSize(w2, h2); if f.Icon then CDMod.ApplyTexCoord(f.Icon.Icon or f.Icon, w2, h2) end
-                    SuppressDebuffBorder(f); self:ApplyText(f, "Essential", 2); self:ApplySwipeSettings(f); AddElvUIBorder(f); SetupFrameGlow(f)
+                if r2Anchor then
+                    WeldToMover(r2Anchor, r2Anchor.mover)
+                    
+                    local w2 = PixelSnap(cfgE.row2Width or 40)
+                    local h2 = PixelSnap(cfgE.row2Height or 40)
+                    local gap2 = PixelSnap(cfgE.row2IconGap or 2)
+                    
+                    local totalW2 = (r2c * w2) + math.max(0, (r2c - 1) * gap2); local startX2 = -(totalW2 / 2) + (w2 / 2)
+                    r2Anchor:SetSize(math.max(1, totalW2), math.max(1, h2)); if r2Anchor.mover then r2Anchor.mover:SetSize(r2Anchor:GetSize()) end
+                    
+                    for i = 1, r2c do 
+                        local f = cachedR2[i]
+                        f:ClearAllPoints(); f:SetPoint("CENTER", r2Anchor, "CENTER", startX2 + (i - 1) * (w2 + gap2), 0); f:SetSize(w2, h2); if f.Icon then CDMod.ApplyTexCoord(f.Icon.Icon or f.Icon, w2, h2) end
+                        SuppressDebuffBorder(f); self:ApplyText(f, "Essential", 2); self:ApplySwipeSettings(f); AddElvUIBorder(f); SetupFrameGlow(f)
+                    end
                 end
             end
             eViewer:Show(); eViewer:SetAlpha(1)
@@ -369,6 +442,9 @@ local function InitCooldownCustom()
     for _, k in ipairs({"Essential", "Utility", "BuffBar", "BuffIcon"}) do for subK, subV in pairs(DefaultConfig[k]) do if WF.db.cooldownCustom[k][subK] == nil then WF.db.cooldownCustom[k][subK] = subV end end end
     if not WF.db.cooldownCustom.enable then return end
     
+    -- [引擎注入] 确保独立版的拖拽数据库存在
+    if not WF.db.movers then WF.db.movers = {} end
+
     local anchors = {
         { name = "WishFlex_Anchor_Utility", title = "冷却：功能型法术", point = {"CENTER", UIParent, "CENTER", 0, -100} },
         { name = "WishFlex_Anchor_Essential", title = "冷却：核心/爆发", point = {"TOP", UIParent, "CENTER", 0, -60} },
@@ -376,10 +452,38 @@ local function InitCooldownCustom()
         { name = "WishFlex_Anchor_BuffIcon", title = "冷却：增益图标", point = {"BOTTOM", UIParent, "CENTER", 0, 60} },
         { name = "WishFlex_Anchor_BuffBar", title = "冷却：增益条", point = {"CENTER", UIParent, "CENTER", 0, 150} }
     }
+    
     for _, a in ipairs(anchors) do
         local frame = CreateFrame("Frame", a.name, UIParent)
         WF:CreateMover(frame, a.name.."Mover", a.point, 45, 45, a.title)
+        
+        -- [核心修复：注入坐标记忆引擎]
+        local moverName = a.name.."Mover"
+        local mover = _G[moverName]
+        if mover then
+            -- 1. 从数据库读取记忆坐标并恢复
+            if WF.db.movers[moverName] then
+                local p = WF.db.movers[moverName]
+                mover:ClearAllPoints()
+                mover:SetPoint(p.point, UIParent, p.relativePoint, p.xOfs, p.yOfs)
+            end
+            
+            -- 2. 挂钩拖动结束事件，每次拖动完自动写入数据库
+            if not mover._wishSaveHooked then
+                mover:HookScript("OnDragStop", function(self)
+                    local point, _, relativePoint, xOfs, yOfs = self:GetPoint()
+                    WF.db.movers[self:GetName()] = {
+                        point = point,
+                        relativePoint = relativePoint,
+                        xOfs = xOfs,
+                        yOfs = yOfs
+                    }
+                end)
+                mover._wishSaveHooked = true
+            end
+        end
     end
+
     _G["WishFlex_Anchor_EssentialR2Mover"]:ClearAllPoints()
     _G["WishFlex_Anchor_EssentialR2Mover"]:SetPoint("TOP", _G["WishFlex_Anchor_EssentialMover"], "BOTTOM", 0, -(WF.db.cooldownCustom.Essential.rowYGap or 2))
 
@@ -397,3 +501,107 @@ local function InitCooldownCustom()
     CDMod:MarkLayoutDirty()
 end
 WF:RegisterModule("cooldownCustom", L["Cooldown Custom"] or "冷却管理器", InitCooldownCustom)
+
+
+-- =========================================================================
+-- [冷却管理器模块 - UI 面板动态注入]
+-- =========================================================================
+if WF.UI then
+    WF.UI:RegisterMenu({ id = "Combat", name = L["Combat"] or "战斗组件", type = "root", icon = "Interface\\AddOns\\WishFlex\\Media\\Icons\\zd", order = 10 })
+    WF.UI:RegisterMenu({ id = "CDManager", parent = "Combat", name = L["Cooldown Manager"] or "冷却管理器", type = "group", order = 20 })
+    WF.UI:RegisterMenu({ id = "CD_Global", parent = "CDManager", name = L["Global Settings"] or "全局设置", key = "cooldownCustom_Global", order = 1 })
+    WF.UI:RegisterMenu({ id = "CD_Essential", parent = "CDManager", name = L["Essential Skills"] or "核心与爆发", key = "cooldownCustom_Essential", order = 3 })
+    WF.UI:RegisterMenu({ id = "CD_Utility", parent = "CDManager", name = L["Utility Skills"] or "功能型法术", key = "cooldownCustom_Utility", order = 4 })
+    WF.UI:RegisterMenu({ id = "CD_BuffIcon", parent = "CDManager", name = L["Buff Icons"] or "增益图标", key = "cooldownCustom_BuffIcon", order = 5 })
+    WF.UI:RegisterMenu({ id = "CD_BuffBar", parent = "CDManager", name = L["Buff Bars"] or "增益条", key = "cooldownCustom_BuffBar", order = 6 })
+
+    local function HandleCDChange(val)
+        if WF.TriggerCooldownLayout then WF.TriggerCooldownLayout() end
+        if val == "UI_REFRESH" then WF.UI:RefreshCurrentPanel() end
+    end
+
+    WF.UI:RegisterPanel("cooldownCustom_Global", function(scrollChild, ColW)
+        local db = WF.db.cooldownCustom or {}; if not db.Essential then db.Essential = {} end
+        local opts = {
+            { type = "group", key = "cd_global_base", text = L["Global Settings"] or "全局设置", childs = {
+                { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用模块", requireReload = true },
+                { type = "dropdown", key = "countFont", db = db, text = L["Global Font"] or "全局字体", options = WF.UI.FontOptions },
+                { type = "color", key = "swipeColor", db = db, text = L["Default Swipe Color"] or "默认冷却遮罩颜色" },
+                { type = "color", key = "activeAuraColor", db = db, text = L["Active Swipe Color"] or "激活时冷却遮罩颜色" },
+                { type = "toggle", key = "reverseSwipe", db = db, text = L["Reverse Swipe"] or "反转冷却转圈方向" },
+                { type = "toggle", key = "enableCustomLayout", db = db.Essential, text = L["Enable Split Layout"] or "启用核心爆发分排布局" },
+                { type = "slider", key = "rowYGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Row Y Gap"] or "第二排Y轴间距" },
+            }}
+        }
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 2, opts, HandleCDChange)
+    end)
+
+    WF.UI:RegisterPanel("cooldownCustom_Essential", function(scrollChild, ColW)
+        local db = WF.db.cooldownCustom or {}; if not db.Essential then db.Essential = {} end
+        local leftOpts = {
+            { type = "group", key = "ess_row1", text = L["Row 1 Settings"] or "第一排设置", childs = {
+                { type = "slider", key = "maxPerRow", db = db.Essential, min = 1, max = 20, step = 1, text = L["Max Per Row"] or "每排最大图标数" },
+                { type = "slider", key = "iconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "图标间距" },
+                { type = "slider", key = "row1Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" },
+                { type = "slider", key = "row1Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" },
+                WF.UI:GetTextOptions(db.Essential, "row1Stack", L["Stack Text"] or "层数文本", "ess_row1_stack"),
+                WF.UI:GetTextOptions(db.Essential, "row1Cd", L["CD Text"] or "冷却文本", "ess_row1_cd"),
+            }}
+        }
+        local rightOpts = {
+            { type = "group", key = "ess_row2", text = L["Row 2 Settings"] or "第二排设置", childs = {
+                { type = "slider", key = "row2IconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "图标间距" },
+                { type = "slider", key = "row2Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" },
+                { type = "slider", key = "row2Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" },
+                WF.UI:GetTextOptions(db.Essential, "row2Stack", L["Stack Text"] or "层数文本", "ess_row2_stack"),
+                WF.UI:GetTextOptions(db.Essential, "row2Cd", L["CD Text"] or "冷却文本", "ess_row2_cd"),
+            }}
+        }
+        local ly = WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW, leftOpts, HandleCDChange)
+        local ry = WF.UI:RenderOptionsGroup(scrollChild, 335, -10, ColW, rightOpts, HandleCDChange)
+        return math.min(ly, ry)
+    end)
+
+    WF.UI:RegisterPanel("cooldownCustom_Utility", function(scrollChild, ColW)
+        local db = WF.db.cooldownCustom or {}; if not db.Utility then db.Utility = {} end
+        local opts = {
+            { type = "group", key = "util_base", text = L["Utility Skills"] or "功能型法术", childs = {
+                { type = "toggle", key = "attachToPlayer", db = db.Utility, text = L["Attach To Player"] or "吸附到玩家血条" },
+                { type = "slider", key = "iconGap", db = db.Utility, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "图标间距" },
+                { type = "slider", key = "width", db = db.Utility, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" },
+                { type = "slider", key = "height", db = db.Utility, min = 10, max = 100, step = 1, text = L["Height"] or "高度" },
+                WF.UI:GetTextOptions(db.Utility, "stack", L["Stack Text"] or "层数文本", "util_stack"),
+                WF.UI:GetTextOptions(db.Utility, "cd", L["CD Text"] or "冷却文本", "util_cd"),
+            }}
+        }
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, HandleCDChange)
+    end)
+
+    WF.UI:RegisterPanel("cooldownCustom_BuffIcon", function(scrollChild, ColW)
+        local db = WF.db.cooldownCustom or {}; if not db.BuffIcon then db.BuffIcon = {} end
+        local opts = {
+            { type = "group", key = "icon_base", text = L["Buff Icons"] or "增益图标", childs = {
+                { type = "slider", key = "width", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" },
+                { type = "slider", key = "height", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Height"] or "高度" },
+                { type = "slider", key = "iconGap", db = db.BuffIcon, min = 0, max = 30, step = 1, text = L["Icon Gap"] or "图标间距" },
+                WF.UI:GetTextOptions(db.BuffIcon, "stack", L["Stack Text"] or "层数文本", "icon_stack"),
+                WF.UI:GetTextOptions(db.BuffIcon, "cd", L["CD Text"] or "冷却文本", "icon_cd"),
+            }}
+        }
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, HandleCDChange)
+    end)
+
+    WF.UI:RegisterPanel("cooldownCustom_BuffBar", function(scrollChild, ColW)
+        local db = WF.db.cooldownCustom or {}; if not db.BuffBar then db.BuffBar = {} end
+        local opts = {
+            { type = "group", key = "bar_base", text = L["Buff Bars"] or "增益条", childs = {
+                { type = "slider", key = "width", db = db.BuffBar, min = 50, max = 400, step = 1, text = L["Width"] or "宽度" },
+                { type = "slider", key = "height", db = db.BuffBar, min = 10, max = 100, step = 1, text = L["Height"] or "高度" },
+                { type = "slider", key = "iconGap", db = db.BuffBar, min = 0, max = 30, step = 1, text = L["Icon Gap"] or "条间距" },
+                WF.UI:GetTextOptions(db.BuffBar, "stack", L["Stack Text"] or "层数文本", "bar_stack"),
+                WF.UI:GetTextOptions(db.BuffBar, "cd", L["CD Text"] or "冷却文本", "bar_cd"),
+            }}
+        }
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, HandleCDChange)
+    end)
+end

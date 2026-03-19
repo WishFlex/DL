@@ -32,10 +32,11 @@ UI.lua
 # Modules\StripeSkin.lua
 Modules\CooldownCustom.lua
 Modules\ClassResource.lua
+Modules\home.lua
 # Modules\Narrative.lua
  Modules\CooldownTracker.lua
 # Modules\WishTargetAlert.lua
-Modules\AuraGlow.lua
+# Modules\AuraGlow.lua
 # Modules\WorldMarker.lua
 # Modules\SmartHide.lua
 # Modules\PetBattle.lua
