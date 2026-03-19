@@ -7,15 +7,8 @@ L["WishFlex Settings"] = "WishFlex Settings"
 L["Settings Console"] = "Settings Console"
 L["Combat"] = "Combat"
 L["Cooldown Manager"] = "Cooldown Manager"
-
--- Resource Menu
 L["Class Resource"] = "Class Resource"
-L["RC Global"] = "Master Control"
-L["RC Power"] = "Power Bar"
-L["RC Class"] = "Class Bar"
-L["RC Mana"] = "Extra Mana"
-L["RC Aura"] = "Aura Bar"
-L["RC Scanner"] = "Aura Scanner"
+L["Action Button Glow"] = "Action Button Glow"
 
 -- Sub Menu
 L["Global Settings"] = "Global Settings"
@@ -53,6 +46,14 @@ L["Max Per Row"] = "Max Icons Per Row"
 L["Attach To Player"] = "Attach to Player Frame"
 L["Total Width"] = "Total Width"
 
+-- CD Global
+L["Global Font"] = "Global Font"
+L["Default Swipe Color"] = "Default Swipe Color"
+L["Active Swipe Color"] = "Active Aura Swipe Color"
+L["Reverse Swipe"] = "Reverse Swipe (Light to Dark)"
+L["Enable Split Layout"] = "Enable Split Row Layout"
+L["Row Y Gap"] = "Vertical Gap Between Rows"
+
 -- Texts
 L["Row 1 Settings"] = "Row 1 Settings"
 L["Row 2 Settings"] = "Row 2 Settings"
@@ -64,6 +65,7 @@ L["X Offset"] = "X Offset"
 L["Y Offset"] = "Y Offset"
 L["Anchor"] = "Anchor Point"
 
+-- Nine-Slice Anchors
 L["TOPLEFT"] = "Top Left"
 L["TOP"] = "Top Center"
 L["TOPRIGHT"] = "Top Right"
@@ -73,3 +75,19 @@ L["RIGHT"] = "Right"
 L["BOTTOMLEFT"] = "Bottom Left"
 L["BOTTOM"] = "Bottom Center"
 L["BOTTOMRIGHT"] = "Bottom Right"
+
+-- Glow
+L["Glow Settings"] = "Glow Settings"
+L["Glow Style"] = "Glow Style"
+L["Pixel"] = "Pixel Glow"
+L["Autocast"] = "Autocast Particles"
+L["Button"] = "Default Button Glow"
+L["Proc"] = "Proc Flash"
+L["Enable Custom Color"] = "Enable Custom Color"
+L["Lines"] = "Lines"
+L["Frequency"] = "Frequency"
+L["Length"] = "Length (0=Auto)"
+L["Thickness"] = "Thickness"
+L["Particles"] = "Particles"
+L["Scale"] = "Scale"
+L["Duration"] = "Duration"

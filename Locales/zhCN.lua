@@ -9,15 +9,8 @@ L["WishFlex Settings"] = "WishFlex 设置"
 L["Settings Console"] = "设置中心"
 L["Combat"] = "战斗"
 L["Cooldown Manager"] = "冷却管理器"
-
--- 【核心新增：资源条侧边栏层级】
 L["Class Resource"] = "资源条"
-L["RC Global"] = "主控"
-L["RC Power"] = "能量条"
-L["RC Class"] = "主资源条"
-L["RC Mana"] = "额外法力"
-L["RC Aura"] = "增益条"
-L["RC Scanner"] = "增益扫描"
+L["Action Button Glow"] = "动作条发光"
 
 -- 侧边栏
 L["Global Settings"] = "全局与外观"
@@ -55,6 +48,14 @@ L["Max Per Row"] = "每排最大显示数量"
 L["Attach To Player"] = "依附至玩家头像框边"
 L["Total Width"] = "整体宽度"
 
+-- 冷却全局
+L["Global Font"] = "全局字体 (例如: Expressway)"
+L["Default Swipe Color"] = "默认冷却遮罩颜色"
+L["Active Swipe Color"] = "技能触发/可用遮罩颜色"
+L["Reverse Swipe"] = "转圈动画反向 (亮变黑)"
+L["Enable Split Layout"] = "启用核心区双排布局"
+L["Row Y Gap"] = "核心区双排垂直间距 (Y轴)"
+
 -- 文本专用
 L["Row 1 Settings"] = "第一排独立设置"
 L["Row 2 Settings"] = "第二排独立设置"
@@ -76,3 +77,19 @@ L["RIGHT"] = "右侧"
 L["BOTTOMLEFT"] = "左下"
 L["BOTTOM"] = "中下"
 L["BOTTOMRIGHT"] = "右下"
+
+-- 发光设置
+L["Glow Settings"] = "发光特效设置"
+L["Glow Style"] = "发光样式"
+L["Pixel"] = "像素走马灯 (Pixel)"
+L["Autocast"] = "粒子散开 (Autocast)"
+L["Button"] = "默认按键高亮 (Button)"
+L["Proc"] = "触发频闪 (Proc)"
+L["Enable Custom Color"] = "启用独立染色"
+L["Lines"] = "走马灯线条数"
+L["Frequency"] = "运动旋转频率"
+L["Length"] = "单根线条长度 (0为自动)"
+L["Thickness"] = "发光体粗细"
+L["Particles"] = "发散粒子数量"
+L["Scale"] = "整体缩放大小"
+L["Duration"] = "单次频闪持续时间"
