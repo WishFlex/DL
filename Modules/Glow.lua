@@ -2,83 +2,69 @@ local AddonName, ns = ...
 local WF = ns.WF
 local L = ns.L
 
--- =========================================
--- [加载外部库]
--- =========================================
 local LCG = LibStub("LibCustomGlow-1.0", true)
-
--- 创建本模块 API (暴露给核心和其他模块)
 local Glow = {}
 WF.GlowAPI = Glow 
 
-local GLOW_KEY = "WishFlex_PIXEL_GLOW"
+local GLOW_KEY = "WishFlex_CD_GLOW"
 
--- =========================================
--- [默认配置]
--- =========================================
+-- 完美对标 VFlow StyleGlowModule 的默认数据结构
 local DefaultConfig = {
     enable = true, 
-    lines = 8, 
-    frequency = 0.2, 
-    thickness = 2, 
-    color = { r = 0, g = 1, b = 0.5, a = 1 } 
+    glowType = "pixel",
+    useCustomColor = false,
+    color = { r = 0.95, g = 0.95, b = 0.32, a = 1 },
+    
+    pixelLines = 8, pixelFrequency = 0.25, pixelLength = 0, pixelThickness = 2, pixelXOffset = 0, pixelYOffset = 0,
+    autocastParticles = 4, autocastFrequency = 0.2, autocastScale = 1, autocastXOffset = 0, autocastYOffset = 0,
+    buttonFrequency = 0,
+    procDuration = 1, procXOffset = 0, procYOffset = 0
 }
 
--- =========================================
--- [核心发光控制功能]
--- =========================================
-function Glow:Show(button)
-    if not LCG or not button then return end
-    
+function Glow:Show(frame)
+    if not LCG or not frame then return end
     local db = WF.db.glow
     if not db or not db.enable then return end
 
-    -- 隐藏暴雪原生的发光材质
-    if button.SpellActivationAlert then 
-        button.SpellActivationAlert:Hide() 
-        button.SpellActivationAlert:SetAlpha(0)
-    end
-    if button.overlay then
-        button.overlay:Hide()
-    end
+    -- 先清除旧的发光，防止图层叠加变亮
+    Glow:Hide(frame)
 
-    -- 启动 LibCustomGlow 的像素发光
-    local color = { db.color.r, db.color.g, db.color.b, db.color.a }
-    LCG.PixelGlow_Start(button, color, db.lines or 8, db.frequency or 0.2, nil, db.thickness or 2, 0, 0, false, GLOW_KEY)
+    local c = db.color or { r = 0.95, g = 0.95, b = 0.32, a = 1 }
+    local colorArr = db.useCustomColor and {c.r, c.g, c.b, c.a} or nil
+
+    -- [核心修复] LCG参数修正：
+    -- PixelGlow_Start 参数: frame, color, lines, frequency, length, thickness, xOffset, yOffset, border, key, frameLevel
+    -- AutoCastGlow_Start 参数: frame, color, N, frequency, scale, xOffset, yOffset, key, frameLevel
+    
+    if db.glowType == "pixel" then
+        local len = db.pixelLength; if len == 0 then len = nil end
+        -- 去掉了末尾错误的 "OVERLAY" 字符串，让它自动继承图标的 FrameLevel
+        LCG.PixelGlow_Start(frame, colorArr, db.pixelLines, db.pixelFrequency, len, db.pixelThickness, db.pixelXOffset, db.pixelYOffset, false, GLOW_KEY)
+    elseif db.glowType == "autocast" then
+        LCG.AutoCastGlow_Start(frame, colorArr, db.autocastParticles, db.autocastFrequency, db.autocastScale, db.autocastXOffset, db.autocastYOffset, GLOW_KEY)
+    elseif db.glowType == "button" then
+        local freq = db.buttonFrequency; if freq == 0 then freq = nil end
+        LCG.ButtonGlow_Start(frame, colorArr, freq)
+    elseif db.glowType == "proc" then
+        -- 这里也是同理，如果是 proc，frameLevel 也必须是一个整数或留空
+        LCG.ProcGlow_Start(frame, {color = colorArr, duration = db.procDuration, xOffset = db.procXOffset, yOffset = db.procYOffset, key = GLOW_KEY})
+    end
 end
 
-function Glow:Hide(button)
-    if not LCG or not button then return end
-    LCG.PixelGlow_Stop(button, GLOW_KEY)
+function Glow:Hide(frame)
+    if not LCG or not frame then return end
+    LCG.PixelGlow_Stop(frame, GLOW_KEY)
+    LCG.AutoCastGlow_Stop(frame, GLOW_KEY)
+    LCG.ButtonGlow_Stop(frame)
+    LCG.ProcGlow_Stop(frame, GLOW_KEY)
 end
 
--- =========================================
--- [模块初始化与挂钩]
--- =========================================
 local function InitGlow()
-    -- 1. 初始化数据库与默认值
     if not WF.db.glow then WF.db.glow = {} end
     local db = WF.db.glow
     for k, v in pairs(DefaultConfig) do
         if db[k] == nil then db[k] = v end
     end
-
-    if not db.enable then return end
-
-    -- 2. 挂钩暴雪原生的动作条发光事件
-    -- 这样当游戏触发技能可用(Proc)时，就会自动使用我们的发光替换
-    if ActionButton_ShowOverlayGlow then
-        hooksecurefunc("ActionButton_ShowOverlayGlow", function(button)
-            Glow:Show(button)
-        end)
-    end
-
-    if ActionButton_HideOverlayGlow then
-        hooksecurefunc("ActionButton_HideOverlayGlow", function(button)
-            Glow:Hide(button)
-        end)
-    end
 end
 
--- 注册到 WishFlex 核心引擎
-WF:RegisterModule("glow", L["Action Button Glow"] or "动作条按钮发光", InitGlow)
+WF:RegisterModule("Glow", "发光引擎", InitGlow)

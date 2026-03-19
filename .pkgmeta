@@ -1,0 +1,11 @@
+ignore:
+  - .github
+  - .vscode
+  - .git
+  - .gitattributes
+  - .pkgmeta
+  - README.md
+  - CHANGELOG.md
+  - changelog.md
+  - CHANGELOG
+  - changelog
