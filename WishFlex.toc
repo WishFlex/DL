@@ -1,0 +1,46 @@
+## Interface: 120001
+## Title: |cff00ffccW|cff00f8cci|cff00f1ccs|cff00ebcch|cff00e4ccF|cff00ddaal|cff00d6aae|cff00cfaax|r
+## Notes: WishFlex 独立界面增强核心插件
+## Notes-zhCN: WishFlex 独立界面增强核心插件
+## Author: Wish
+## Version: 3.0
+## IconTexture: Interface\AddOns\WishFlex\Media\Textures\Logo2.tga
+## SavedVariables: WishFlexDB
+## OptionalDeps: LibCustomGlow-1.0, LibSharedMedia-3.0, SharedMedia
+
+# 1. 加载第三方库 (请务必保持这个严格的加载顺序)
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
+
+# 2. 加载多语言文件
+Locales\enUS.lua
+Locales\zhCN.lua
+
+# 3. 加载核心和UI框架
+Core.lua
+UI.lua
+
+# 4. 加载各个功能模块
+# (注意：为了防止刚脱离 ElvUI 时游戏疯狂报错，这里先全部注释掉。我们每重构好一个文件，你就删掉它前面的 # 号)
+# Modules\KeyBinder.lua
+# Modules\RareAlert.lua
+# Modules\VehicleBar.lua
+# Modules\StripeSkin.lua
+Modules\CooldownCustom.lua
+Modules\ClassResource.lua
+# Modules\Narrative.lua
+ Modules\CooldownTracker.lua
+# Modules\WishTargetAlert.lua
+Modules\AuraGlow.lua
+# Modules\WorldMarker.lua
+# Modules\SmartHide.lua
+# Modules\PetBattle.lua
+Modules\Glow.lua
+# Modules\MacroUI.lua
+# Modules\RightClick.lua
+# Modules\SpellAlpha.lua
+Modules\ChatSetup.lua
