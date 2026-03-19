@@ -33,6 +33,7 @@ UI.lua
 Modules\CooldownCustom.lua
 Modules\ClassResource.lua
 Modules\home.lua
+Modules\WishMonitor.lua
 # Modules\Narrative.lua
  Modules\CooldownTracker.lua
 # Modules\WishTargetAlert.lua

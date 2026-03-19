@@ -267,7 +267,7 @@ function Factory:CreateGroupHeader(parent, x, y, width, titleText, isExpanded, o
 end
 
 -- =========================================
--- [递归渲染引擎 - 引入弹窗拦截] 
+-- [递归渲染引擎 - 引入弹窗拦截与强制刷新] 
 -- =========================================
 local GroupState = {}
 function WF.UI:RenderOptionsGroup(parent, startX, startY, colWidth, options, onChange, level)
@@ -280,13 +280,15 @@ function WF.UI:RenderOptionsGroup(parent, startX, startY, colWidth, options, onC
             if GroupState[opt.key] == nil then GroupState[opt.key] = false end
             local btn
             btn, y = Factory:CreateGroupHeader(parent, cx, y, itemWidth, opt.text, GroupState[opt.key], function()
-                GroupState[opt.key] = not GroupState[opt.key]; onChange("UI_REFRESH")
+                GroupState[opt.key] = not GroupState[opt.key]
+                -- 【核心修复】强制立即刷新UI面板，彻底解决必须点其他地方才能展开折叠组的 Bug！
+                WF.UI:RefreshCurrentPanel() 
+                if type(onChange) == "function" then onChange("UI_REFRESH") end
             end)
             if GroupState[opt.key] and opt.childs then
                 y = self:RenderOptionsGroup(parent, startX, y - 4, colWidth, opt.childs, onChange, level + 1); y = y - 6
             end
         elseif opt.type == "toggle" then 
-            -- [核心修改]：拦截回调，判断是否需要重载
             _, y = Factory:CreateToggle(parent, cx + 8, y, itemWidth, opt.text, opt.db, opt.key, function(val)
                 if opt.requireReload then WF.UI:ShowReloadPopup() else if onChange then onChange(val) end end
             end)
