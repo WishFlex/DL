@@ -55,8 +55,8 @@ local TITLE_HEIGHT = 35
 local SIDEBAR_WIDTH_COLLAPSED = 40
 local SIDEBAR_WIDTH_EXPANDED = 200
 
-local ICON_ARROW = "Interface\\ChatFrame\\ChatFrameExpandArrow"
-local ICON_CLOSE = "Interface\\FriendsFrame\\ClearBroadcastIcon"
+local ICON_ARROW = "Interface\\AddOns\\WishFlex\\Media\\Icons\\menu"
+local ICON_CLOSE = "Interface\\AddOns\\WishFlex\\Media\\Icons\\off"
 local ICON_LOGO = "Interface\\AddOns\\WishFlex\\Media\\Icons\\Logo2"
 
 local LSM = LibStub("LibSharedMedia-3.0", true)

@@ -26,7 +26,7 @@ WF.UI:RegisterPanel("WF_HOME", function(scrollChild, ColW)
     local title = scrollChild:CreateFontString(nil, "OVERLAY")
     title:SetFont(STANDARD_TEXT_FONT, 28, "OUTLINE")
     title:SetPoint("TOPLEFT", logo, "TOPRIGHT", 15, -5)
-    title:SetText("|cff00ffccWishFlex|r GeniSys")
+    title:SetText("|cff00ffccWishFlex|r QoL")
     title:SetTextColor(1, 1, 1)
     
     local sub = scrollChild:CreateFontString(nil, "OVERLAY")

@@ -9,9 +9,6 @@ WF.ClassResourceAPI = CR
 local playerClass = select(2, UnitClass("player"))
 local hasHealerSpec = (playerClass == "PALADIN" or playerClass == "PRIEST" or playerClass == "SHAMAN" or playerClass == "MONK" or playerClass == "DRUID" or playerClass == "EVOKER")
 
--- =========================================
--- [事件分发引擎机制]
--- =========================================
 function CR:RegisterEvent(event, func)
     if not self._events then self._events = {} end
     self._events[event] = func or event
@@ -23,17 +20,15 @@ CR:SetScript("OnEvent", function(self, event, ...)
     elseif type(handler) == "string" and type(self[handler]) == "function" then self[handler](self, event, ...) end
 end)
 
--- =========================================
--- [数据库与默认值]
--- =========================================
 local barDefaults = {
-    power = { independent = false, barXOffset = 0, barYOffset = 0, height = 14, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=0, g=0.5, b=1}, useCustomTexture = false, texture = "WishFlex-g1", useCustomBgTexture = false, bgTexture = "WishFlex-g1", bgColor = {r=0, g=0, b=0, a=0.5} },
-    class = { independent = false, barXOffset = 0, barYOffset = 0, height = 12, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=1, g=0.96, b=0.41}, useCustomColors = {}, customColors = {}, useCustomTexture = false, texture = "WishFlex-g1", useCustomBgTexture = false, bgTexture = "WishFlex-g1", bgColor = {r=0, g=0, b=0, a=0.5} },
-    mana = { independent = false, barXOffset = 0, barYOffset = 0, height = 10, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=0, g=0.5, b=1}, useCustomTexture = false, texture = "WishFlex-g1", useCustomBgTexture = false, bgTexture = "WishFlex-g1", bgColor = {r=0, g=0, b=0, a=0.5} },
+    power = { independent = false, barXOffset = 0, barYOffset = 0, height = 14, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=0, g=0.5, b=1}, useCustomTexture = false, texture = "Wish2", useCustomBgTexture = false, bgTexture = "Wish2", bgColor = {r=0, g=0, b=0, a=0.5} },
+    class = { independent = false, barXOffset = 0, barYOffset = 0, height = 12, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=1, g=0.96, b=0.41}, useCustomColors = {}, customColors = {}, useCustomTexture = false, texture = "Wish2", useCustomBgTexture = false, bgTexture = "Wish2", bgColor = {r=0, g=0, b=0, a=0.5} },
+    mana = { independent = false, barXOffset = 0, barYOffset = 0, height = 10, textEnable = true, textFormat = "AUTO", textAnchor = "CENTER", fontSize = 12, outline = "OUTLINE", color = {r=1, g=1, b=1}, xOffset = 0, yOffset = 0, timerEnable = true, timerAnchor = "CENTER", timerXOffset = 0, timerYOffset = 0, useCustomColor = false, customColor = {r=0, g=0.5, b=1}, useCustomTexture = false, texture = "Wish2", useCustomBgTexture = false, bgTexture = "Wish2", bgColor = {r=0, g=0, b=0, a=0.5} },
 }
 
 local defaults = {
-    enable = true, alignWithCD = false, alignYOffset = 1, widthOffset = 0, texture = "WishFlex-g1", font = "Expressway", specConfigs = {},
+    enable = true, alignWithCD = false, alignYOffset = 1, widthOffset = 0, texture = "Wish2", font = "Expressway", specConfigs = {},
+    sortOrder = {"mana", "power", "class", "monitor"} 
 }
 
 local DEFAULT_COLOR = {r=1, g=1, b=1}
@@ -53,12 +48,10 @@ end
 local function GetDB()
     if not WF.db.classResource then WF.db.classResource = {} end
     DeepMerge(WF.db.classResource, defaults)
+    if not WF.db.classResource.sortOrder or #WF.db.classResource.sortOrder < 4 then WF.db.classResource.sortOrder = {"mana", "power", "class", "monitor"} end
     return WF.db.classResource
 end
 
--- ========================================================
--- [完美像素边框与物理取整引擎]
--- ========================================================
 local function GetOnePixelSize()
     local screenHeight = select(2, GetPhysicalScreenSize()); if not screenHeight or screenHeight == 0 then return 1 end
     local uiScale = UIParent:GetEffectiveScale(); if not uiScale or uiScale == 0 then return 1 end
@@ -98,11 +91,7 @@ local function AddPixelBorder(frame)
     end
 end
 
--- =========================================
--- [工具函数]
--- =========================================
 local function IsSecret(v) return type(v) == "number" and issecretvalue and issecretvalue(v) end
-local function IsSafeValue(val) if val == nil then return false end if type(issecretvalue) == "function" and issecretvalue(val) then return false end return true end
 
 local function SafeFormatNum(v)
     local num = tonumber(v) or 0
@@ -131,32 +120,18 @@ local function GetCurrentSpecConfig(ctxId)
     if cfg.showPower == nil then cfg.showPower = true end
     if cfg.showClass == nil then cfg.showClass = true end
     if cfg.showMana == nil then cfg.showMana = false end
-    if cfg.textPower == nil then cfg.textPower = true end
-    if cfg.textClass == nil then cfg.textClass = true end
-    if cfg.textMana == nil then cfg.textMana = true end
 
     if type(cfg.power) ~= "table" then cfg.power = {} end
     DeepMerge(cfg.power, barDefaults.power)
-    if type(cfg.power.thresholdLines) ~= "table" then
-        cfg.power.thresholdLines = {
-            {enable = false, value = 50, thickness = 1, color = {r=1, g=1, b=1, a=1}},
-            {enable = false, value = 100, thickness = 1, color = {r=1, g=1, b=1, a=1}},
-            {enable = false, value = 150, thickness = 1, color = {r=1, g=1, b=1, a=1}},
-            {enable = false, value = 200, thickness = 1, color = {r=1, g=1, b=1, a=1}},
-            {enable = false, value = 250, thickness = 1, color = {r=1, g=1, b=1, a=1}},
-        }
-    end
-    if cfg.power.useThresholdLine ~= nil then
-        cfg.power.thresholdLines[1].enable = cfg.power.useThresholdLine; cfg.power.thresholdLines[1].value = cfg.power.thresholdValue or 50; cfg.power.thresholdLines[1].thickness = cfg.power.thresholdThickness or 1; cfg.power.thresholdLines[1].color = cfg.power.thresholdColor or {r=1,g=1,b=1,a=1}
-        cfg.power.useThresholdLine = nil; cfg.power.thresholdValue = nil; cfg.power.thresholdThickness = nil; cfg.power.thresholdColor = nil
-    end
     if type(cfg.class) ~= "table" then cfg.class = {} end; DeepMerge(cfg.class, barDefaults.class)
     if type(cfg.mana) ~= "table" then cfg.mana = {} end; DeepMerge(cfg.mana, barDefaults.mana)
     return cfg
 end
 
-local function GetTargetWidth(cfg)
+-- 【完美重构：提供全插件通用的计算宽度接口】
+function CR:GetActiveWidth()
     local db = GetDB()
+    local specCfg = GetCurrentSpecConfig(GetCurrentContextID())
     if db.alignWithCD and WF.db.cooldownCustom and WF.db.cooldownCustom.Essential then
         local cdDB = WF.db.cooldownCustom.Essential
         local maxPerRow = tonumber(cdDB.maxPerRow) or 7
@@ -164,7 +139,7 @@ local function GetTargetWidth(cfg)
         local gap = PixelSnap(tonumber(cdDB.iconGap) or 2)
         return (maxPerRow * w) + ((maxPerRow - 1) * gap) + (tonumber(db.widthOffset) or 0)
     end
-    return tonumber(cfg.width) or 250
+    return tonumber(specCfg.width) or 250
 end
 
 local function GetSafeColor(cfg, defColor, isClassBar)
@@ -221,9 +196,21 @@ function CR:UpdateDividers(bar, maxVal)
     local segWidth = width / numMax
     local targetFrame = bar.gridFrame or bar.textFrame or bar
     
+    local pSize = GetOnePixelSize()
     for i = 1, numDividers do
-        if not bar.dividers[i] then local tex = targetFrame:CreateTexture(nil, "OVERLAY", nil, 7); tex:SetColorTexture(0, 0, 0, 1); tex:SetWidth(1); bar.dividers[i] = tex end
-        bar.dividers[i]:ClearAllPoints(); bar.dividers[i]:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", segWidth * i, 0); bar.dividers[i]:SetPoint("BOTTOMLEFT", targetFrame, "BOTTOMLEFT", segWidth * i, 0); bar.dividers[i]:Show()
+        if not bar.dividers[i] then 
+            local tex = targetFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+            tex:SetColorTexture(0, 0, 0, 1)
+            if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
+            if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
+            bar.dividers[i] = tex 
+        end
+        bar.dividers[i]:SetWidth(pSize)
+        local offset = PixelSnap(segWidth * i)
+        bar.dividers[i]:ClearAllPoints()
+        bar.dividers[i]:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", offset, 0)
+        bar.dividers[i]:SetPoint("BOTTOMLEFT", targetFrame, "BOTTOMLEFT", offset, 0)
+        bar.dividers[i]:Show()
     end
     for i = numDividers + 1, #bar.dividers do if bar.dividers[i] then bar.dividers[i]:Hide() end end
 end
@@ -283,16 +270,16 @@ local function UpdateBarValueSafe(sb, rawCurr, rawMax)
     if IsSecret(currentMax) or type(currentMax) ~= "number" or currentMax ~= rawMax then sb:SetMinMaxValues(0, rawMax); sb._currentValue = rawCurr; sb._targetValue = rawCurr; sb:SetValue(rawCurr) else sb._targetValue = rawCurr end
 end
 
--- =========================================
--- [渲染引擎]
--- =========================================
 function CR:UpdateLayout()
+    if self.isRendering then return end
+    self.isRendering = true
+    
     self:WakeUp()
-    if not self.baseAnchor then return end
+    if not self.baseAnchor then self.isRendering = false; return end
     
     local db = GetDB(); local currentContextID = GetCurrentContextID(); local specCfg = GetCurrentSpecConfig(currentContextID)
     self.cachedSpecCfg = specCfg
-    local targetWidth = GetTargetWidth(specCfg); self.baseAnchor:SetSize(targetWidth, 14)
+    local targetWidth = self:GetActiveWidth(); self.baseAnchor:SetSize(targetWidth, 14)
 
     local function ApplyBarGraphics(bar, barCfg)
         if not bar or not bar.statusBar or not barCfg then return end
@@ -306,7 +293,9 @@ function CR:UpdateLayout()
         end
     end
 
-    ApplyBarGraphics(self.powerBar, specCfg.power); ApplyBarGraphics(self.classBar, specCfg.class); ApplyBarGraphics(self.manaBar, specCfg.mana)
+    pcall(ApplyBarGraphics, self.powerBar, specCfg.power)
+    pcall(ApplyBarGraphics, self.classBar, specCfg.class)
+    pcall(ApplyBarGraphics, self.manaBar, specCfg.mana)
 
     local pType = UnitPowerType("player"); local pMax = UnitPowerMax("player", pType); local validMax = IsSecret(pMax) or ((tonumber(pMax) or 0) > 0)
     self.showPower = specCfg.power and validMax and specCfg.showPower
@@ -314,29 +303,75 @@ function CR:UpdateLayout()
     local manaMax = UnitPowerMax("player", 0); local validManaMax = IsSecret(manaMax) or ((tonumber(manaMax) or 0) > 0)
     self.showMana = hasHealerSpec and specCfg.mana and validManaMax and specCfg.showMana
 
-    local stackOrder = {
-        { bar = self.manaBar, show = self.showMana, cfg = specCfg.mana, anchor = self.manaAnchor },
-        { bar = self.powerBar, show = self.showPower, cfg = specCfg.power, anchor = self.powerAnchor },
-        { bar = self.classBar, show = self.showClass, cfg = specCfg.class, anchor = self.classAnchor }
+    local wmShow = false
+    local wmAnchor = nil
+    local wmDB = WF.db.wishMonitor
+    if WF.WishMonitorAPI and WF.WishMonitorAPI.baseAnchor then
+        wmAnchor = WF.WishMonitorAPI.baseAnchor
+        if db.enable and WF.WishMonitorAPI.ActiveFrames and #WF.WishMonitorAPI.ActiveFrames > 0 then wmShow = true end
+    end
+
+    local stackItems = {
+        class = { frame = self.classBar, show = self.showClass, cfg = specCfg.class, anchor = self.classAnchor },
+        power = { frame = self.powerBar, show = self.showPower, cfg = specCfg.power, anchor = self.powerAnchor },
+        mana  = { frame = self.manaBar, show = self.showMana, cfg = specCfg.mana, anchor = self.manaAnchor },
+        monitor = { frame = wmAnchor, show = wmShow, isMonitor = true }
     }
 
+    local sortOrder = db.sortOrder or {"mana", "power", "class", "monitor"}
     local lastStackedFrame = nil
-    for _, item in ipairs(stackOrder) do
-        local f = item.bar
-        if item.show and item.cfg then
-            f.isForceHidden = false; f:Show()
-            f:SetSize(targetWidth, tonumber(item.cfg.height) or 14)
-            f:ClearAllPoints()
-            if item.cfg.independent then f:SetPoint("CENTER", item.anchor.mover or item.anchor, "CENTER", tonumber(item.cfg.barXOffset) or 0, tonumber(item.cfg.barYOffset) or 0)
-            else
-                if not lastStackedFrame then
-                    if db.alignWithCD and _G.EssentialCooldownViewer then f:SetPoint("BOTTOM", _G.EssentialCooldownViewer, "TOP", tonumber(item.cfg.barXOffset) or 0, (tonumber(db.alignYOffset) or 1) + (tonumber(item.cfg.barYOffset) or 0)) else f:SetPoint("CENTER", self.baseAnchor.mover or self.baseAnchor, "CENTER", tonumber(item.cfg.barXOffset) or 0, tonumber(item.cfg.barYOffset) or 0) end
-                else f:SetPoint("BOTTOM", lastStackedFrame, "TOP", tonumber(item.cfg.barXOffset) or 0, (tonumber(specCfg.yOffset) or 1) + (tonumber(item.cfg.barYOffset) or 0)) end
-                lastStackedFrame = f
+
+    for i = #sortOrder, 1, -1 do
+        local key = sortOrder[i]
+        local item = stackItems[key]
+        
+        if item and item.frame then
+            if not item.isMonitor then
+                if item.show then
+                    item.frame.isForceHidden = false; item.frame:Show()
+                    item.frame:SetSize(targetWidth, tonumber(item.cfg.height) or 14)
+                else
+                    item.frame.isForceHidden = true; item.frame:Hide()
+                end
             end
-        else f.isForceHidden = true; f:Hide() end
+            
+            if item.show then
+                local isInd = false
+                local xOff, yOff = 0, 0
+                
+                if item.isMonitor then
+                    isInd = false
+                    xOff = 0
+                    yOff = 0
+                else
+                    isInd = item.cfg.independent
+                    xOff = tonumber(item.cfg.barXOffset) or 0
+                    yOff = tonumber(item.cfg.barYOffset) or 0
+                end
+                
+                item.frame:ClearAllPoints()
+                if isInd then
+                    if not item.isMonitor then
+                        item.frame:SetPoint("CENTER", item.anchor.mover or item.anchor, "CENTER", xOff, yOff)
+                    end
+                else
+                    if not lastStackedFrame then
+                        if db.alignWithCD and _G.EssentialCooldownViewer then
+                            item.frame:SetPoint("BOTTOM", _G.EssentialCooldownViewer, "TOP", xOff, (tonumber(db.alignYOffset) or 1) + yOff)
+                        else
+                            item.frame:SetPoint("CENTER", self.baseAnchor.mover or self.baseAnchor, "CENTER", xOff, yOff)
+                        end
+                    else
+                        item.frame:SetPoint("BOTTOM", lastStackedFrame, "TOP", xOff, (tonumber(specCfg.yOffset) or 1) + yOff)
+                    end
+                    lastStackedFrame = item.frame
+                end
+            end
+        end
     end
+    
     self:DynamicTick()
+    self.isRendering = false
 end
 
 function CR:DynamicTick()
@@ -410,8 +445,8 @@ function CR:CreateBarContainer(name, parent)
     sb:SetAllPoints(bar)
     bar.statusBar = sb
     local bg = sb:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); sb.bg = bg
-    local gridFrame = CreateFrame("Frame", nil, bar); gridFrame:SetAllPoints(bar); gridFrame:SetFrameLevel(bar:GetFrameLevel() + 5); bar.gridFrame = gridFrame
-    local textFrame = CreateFrame("Frame", nil, bar); textFrame:SetAllPoints(bar); textFrame:SetFrameLevel(bar:GetFrameLevel() + 10); bar.textFrame = textFrame
+    local gridFrame = CreateFrame("Frame", nil, bar); gridFrame:SetAllPoints(bar); gridFrame:SetFrameLevel(bar:GetFrameLevel() + 15); bar.gridFrame = gridFrame
+    local textFrame = CreateFrame("Frame", nil, bar); textFrame:SetAllPoints(bar); textFrame:SetFrameLevel(bar:GetFrameLevel() + 50); bar.textFrame = textFrame
     bar.text = textFrame:CreateFontString(nil, "OVERLAY"); bar.timerText = textFrame:CreateFontString(nil, "OVERLAY") 
     return bar
 end
@@ -446,12 +481,11 @@ end
 
 local function InitClassResource()
     GetDB()
-    if not WF.db.classResource.enable then return end
     
-    CR.baseAnchor = CR:CreateAnchor("WishFlex_BaseAnchor", "WishFlex: 全局排版起点(底层)", -180, 14)
-    CR.manaAnchor = CR:CreateAnchor("WishFlex_ManaAnchor", "WishFlex: [独立] 专属法力条", -220, 10)
-    CR.powerAnchor = CR:CreateAnchor("WishFlex_PowerAnchor", "WishFlex: [独立] 能量条", -160, 14)
-    CR.classAnchor = CR:CreateAnchor("WishFlex_ClassAnchor", "WishFlex: [独立] 主资源条", -140, 14)
+    CR.baseAnchor = CR:CreateAnchor("WishFlex_BaseAnchor", "WishFlex: " .. (L["Global Layout Anchor"] or "全局排版起点"), -180, 14)
+    CR.manaAnchor = CR:CreateAnchor("WishFlex_ManaAnchor", "WishFlex: [独立] " .. (L["Extra Mana Bar"] or "专属法力条"), -220, 10)
+    CR.powerAnchor = CR:CreateAnchor("WishFlex_PowerAnchor", "WishFlex: [独立] " .. (L["Power Bar"] or "能量条"), -160, 14)
+    CR.classAnchor = CR:CreateAnchor("WishFlex_ClassAnchor", "WishFlex: [独立] " .. (L["Class Resource Bar"] or "主资源条"), -140, 14)
 
     CR.powerBar = CR:CreateBarContainer("WishFlex_PowerBar", UIParent)
     CR.classBar = CR:CreateBarContainer("WishFlex_ClassBar", UIParent)
@@ -460,6 +494,11 @@ local function InitClassResource()
     CR.AllBars = {CR.powerBar, CR.classBar, CR.manaBar}
     CR.showPower, CR.showClass, CR.showMana = false, false, false
     CR.idleTimer = 0; CR.sleepMode = false; CR.hasActiveTimer = false
+    CR.isRendering = false
+    
+    if not WF.db.classResource.enable then
+        for i = 1, #CR.AllBars do CR.AllBars[i]:Hide() end
+    end
     
     CR:RegisterEvent("PLAYER_ENTERING_WORLD", "UpdateLayout")
     CR:RegisterEvent("UNIT_DISPLAYPOWER", "UpdateLayout")
@@ -469,12 +508,25 @@ local function InitClassResource()
     CR:RegisterEvent("UNIT_POWER_UPDATE", "WakeUp")
     CR:RegisterEvent("UNIT_POWER_FREQUENT", "WakeUp")
 
-    C_Timer.After(0.5, function()
+    C_Timer.After(0.8, function()
         local CDMod = WF.CooldownCustomAPI or WF.CooldownCustom
         if CDMod and CDMod.TriggerLayout then 
             hooksecurefunc(CDMod, "TriggerLayout", function() if GetDB().alignWithCD then CR:UpdateLayout() end end) 
         end
+        
+        if WF.WishMonitorAPI then
+            WF.WishMonitorAPI.UpdateAnchor = function() end 
+            
+            hooksecurefunc(WF.WishMonitorAPI, "Render", function()
+                if not CR.isRendering then
+                    CR:UpdateLayout()
+                end
+            end)
+        end
+        
+        CR:UpdateLayout()
     end)
+    
     CR:OnContextChanged()
     
     local ticker = 0; CR.frameTick = 0
@@ -507,7 +559,7 @@ end
 WF:RegisterModule("classResource", L["Class Resource"] or "资源条", InitClassResource)
 
 -- =========================================================================
--- [UI 动态注入引擎]
+-- [UI 动态注入引擎与可视化排序器]
 -- =========================================================================
 if WF.UI then
     WF.UI:RegisterMenu({ id = "ClassResource", parent = "Combat", name = L["Class Resource"] or "职业资源条", type = "group", order = 25 })
@@ -527,43 +579,157 @@ if WF.UI then
         local opts = {}
         if LSM then
             local list = LSM:List("statusbar")
-            if list then
-                for i = 1, #list do table.insert(opts, { text = list[i], value = list[i] }) end
-            end
+            if list then for i = 1, #list do table.insert(opts, { text = list[i], value = list[i] }) end end
         end
-        if #opts == 0 then table.insert(opts, {text = "WishFlex-g1", value = "WishFlex-g1"}) end
+        if #opts == 0 then table.insert(opts, {text = "Wish2", value = "Wish2"}) end
         return opts
+    end
+    
+    local function ForceSetButtonText(btn, text)
+        if not btn then return end
+        pcall(function() if type(btn.SetText) == "function" then btn:SetText(text) end end)
+        for _, region in pairs({btn:GetRegions()}) do if region:IsObjectType("FontString") then pcall(function() region:SetText(text) end) end end
     end
 
     WF.UI:RegisterPanel("classResource_Global", function(scrollChild, ColW)
         local db = GetDB()
         local tempDB = { spec = CR.selectedSpecForConfig or GetCurrentContextID() }
         local specCfg = GetCurrentSpecConfig(tempDB.spec)
-
-        local flatOpts = {
-            { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用资源条", requireReload = true },
-            { type = "dropdown", key = "texture", db = db, text = L["Global Texture"] or "全局材质", options = GetTextureOptions() },
-            { type = "dropdown", key = "font", db = db, text = L["Global Font"] or "全局字体", options = WF.UI.FontOptions },
-            { type = "dropdown", key = "spec", db = tempDB, text = L["Select Context"] or "【核心】当前编辑的专精", options = GetSpecOptions() },
-            { type = "toggle", key = "showPower", db = specCfg, text = L["Enable Power Bar"] or "启用 能量条" },
-            { type = "toggle", key = "showClass", db = specCfg, text = L["Enable Class Bar"] or "启用 主资源条" },
-            { type = "toggle", key = "showMana", db = specCfg, text = L["Enable Mana Bar"] or "启用 额外法力条" },
-            { type = "slider", key = "width", db = specCfg, text = L["Fixed Width"] or "全局定宽 (取消吸附时生效)", min=50, max=600, step=1 },
-            { type = "slider", key = "yOffset", db = specCfg, text = L["Stack Y Offset"] or "统一行堆叠间距", min=0, max=50, step=1 },
-            { type = "toggle", key = "alignWithCD", db = db, text = L["Align With CD Manager"] or "自动吸附到冷却管理器" },
-            { type = "slider", key = "alignYOffset", db = db, text = L["Align Y Offset"] or "吸附时基础 Y 轴偏移", min = -50, max = 50, step = 1 },
-            { type = "slider", key = "widthOffset", db = db, text = L["Width Compensation"] or "吸附时宽度强行补偿", min = -10, max = 10, step = 1 },
-        }
+        local y = -10
         
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 2, flatOpts, function(val) 
-            if tempDB.spec ~= CR.selectedSpecForConfig then 
-                CR.selectedSpecForConfig = tempDB.spec
-                WF.UI:RefreshCurrentPanel() 
-            else 
-                CR:UpdateLayout()
-                CR:DynamicTick()
-            end 
-        end)
+        CR.ExpandState = CR.ExpandState or { global = false }
+
+        local tGlobal = L["Global Settings"] or "全局排版设置"
+        local btnGlobal = scrollChild.CR_BtnGlobal
+        if not btnGlobal then
+            btnGlobal = WF.UI.Factory:CreateFlatButton(scrollChild, "", function() CR.ExpandState.global = not CR.ExpandState.global; WF.UI:RefreshCurrentPanel() end)
+            scrollChild.CR_BtnGlobal = btnGlobal
+        end
+        ForceSetButtonText(btnGlobal, tGlobal)
+        btnGlobal:ClearAllPoints(); btnGlobal:SetPoint("TOPLEFT", 15, y); btnGlobal:SetWidth(ColW * 1.5); btnGlobal:Show()
+        y = y - 35
+
+        if CR.ExpandState.global then
+            local flatOpts = {
+                { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用资源条 (总控全局及监控条开关)", requireReload = true },
+                { type = "dropdown", key = "texture", db = db, text = L["Global Texture"] or "全局材质", options = GetTextureOptions() },
+                { type = "dropdown", key = "font", db = db, text = L["Global Font"] or "全局字体", options = WF.UI.FontOptions },
+                { type = "dropdown", key = "spec", db = tempDB, text = L["Select Context"] or "【核心】当前编辑的专精", options = GetSpecOptions() },
+                { type = "slider", key = "width", db = specCfg, text = L["Fixed Width"] or "全局定宽 (取消吸附时生效)", min=50, max=600, step=1 },
+                { type = "slider", key = "yOffset", db = specCfg, text = L["Stack Y Offset"] or "统一行堆叠间距", min=0, max=50, step=1 },
+                { type = "toggle", key = "alignWithCD", db = db, text = L["Align With CD Manager"] or "自动吸附到冷却管理器" },
+                { type = "slider", key = "alignYOffset", db = db, text = L["Align Y Offset"] or "吸附时基础 Y 轴偏移", min = -50, max = 50, step = 1 },
+                { type = "slider", key = "widthOffset", db = db, text = L["Width Compensation"] or "吸附时宽度强行补偿", min = -10, max = 10, step = 1 },
+            }
+            
+            y = WF.UI:RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, flatOpts, function(val) 
+                if tempDB.spec ~= CR.selectedSpecForConfig then 
+                    CR.selectedSpecForConfig = tempDB.spec
+                    WF.UI:RefreshCurrentPanel() 
+                else 
+                    CR:UpdateLayout()
+                    if WF.WishMonitorAPI and WF.WishMonitorAPI.TriggerUpdate then WF.WishMonitorAPI:TriggerUpdate() end
+                end 
+            end)
+            y = y - 10
+        end
+        
+        -- ==========================================
+        -- [排版层级预览条 - 独立常驻]
+        -- ==========================================
+        local tLbl = scrollChild.CR_SortTitle or scrollChild:CreateFontString(nil, "OVERLAY")
+        scrollChild.CR_SortTitle = tLbl
+        tLbl:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE"); tLbl:SetPoint("TOPLEFT", 15, y)
+        tLbl:SetText(L["Unified Sort Title"] or "|cff00ccff[模块层级与排版预览]|r (点击预览条可快速编辑对应设置)")
+        y = y - 30
+        
+        local sortOrder = db.sortOrder
+        local itemDefs = {
+            mana = { name = L["Extra Mana Bar"] or "额外法力条", color = {r=0, g=0.5, b=1}, tab = "classResource_Mana" },
+            power = { name = L["Power Bar"] or "能量条", color = PLAYER_CLASS_COLOR, tab = "classResource_Power" },
+            class = { name = L["Class Resource Bar"] or "主资源条", color = {r=1, g=0.96, b=0.41}, tab = "classResource_Class" },
+            monitor = { name = L["Custom Monitor"] or "自定义监控 (WishMonitor)", color = {r=0.2, g=0.8, b=0.2}, tab = "classResource_Monitor" }
+        }
+
+        for i, key in ipairs(sortOrder) do
+            local def = itemDefs[key]
+            if def then
+                local row = scrollChild["CR_SortRow_"..i] or CreateFrame("Button", nil, scrollChild, "BackdropTemplate")
+                scrollChild["CR_SortRow_"..i] = row
+                row:SetSize(ColW * 1.5, 30); row:ClearAllPoints(); row:SetPoint("TOPLEFT", 15, y); row:RegisterForClicks("LeftButtonUp")
+                
+                if not row.sb then
+                    row.sb = CreateFrame("StatusBar", nil, row); row.sb:SetAllPoints()
+                    local border = CreateFrame("Frame", nil, row.sb, "BackdropTemplate")
+                    border:SetAllPoints(); border:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+                    border:SetBackdropBorderColor(0,0,0,1); row.border = border
+                    row.text = row.sb:CreateFontString(nil, "OVERLAY"); row.text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+                    
+                    row.btnUp = CreateFrame("Button", nil, row)
+                    row.btnUp:SetSize(24, 24); row.btnUp:SetPoint("RIGHT", row, "RIGHT", -30, 0); row.btnUp:SetFrameLevel(row.sb:GetFrameLevel() + 20)
+                    row.btnUp.Text = row.btnUp:CreateFontString(nil, "OVERLAY")
+                    row.btnUp.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.btnUp.Text:SetPoint("CENTER", 0, 0); row.btnUp.Text:SetText("▲")
+                    
+                    row.btnDown = CreateFrame("Button", nil, row)
+                    row.btnDown:SetSize(24, 24); row.btnDown:SetPoint("RIGHT", row, "RIGHT", -2, 0); row.btnDown:SetFrameLevel(row.sb:GetFrameLevel() + 20)
+                    row.btnDown.Text = row.btnDown:CreateFontString(nil, "OVERLAY")
+                    row.btnDown.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.btnDown.Text:SetPoint("CENTER", 0, 0); row.btnDown.Text:SetText("▼")
+                    
+                    row.enableBtn = CreateFrame("Button", nil, row)
+                    row.enableBtn:SetSize(60, 20); row.enableBtn:SetPoint("RIGHT", row.btnUp, "LEFT", -10, 0); row.enableBtn:SetFrameLevel(row.sb:GetFrameLevel() + 20)
+                    row.enableBtn.Text = row.enableBtn:CreateFontString(nil, "OVERLAY")
+                    row.enableBtn.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.enableBtn.Text:SetPoint("CENTER", 0, 0)
+                end
+                
+                row.sb:SetStatusBarTexture(LSM:Fetch("statusbar", db.texture) or "Interface\\TargetingFrame\\UI-StatusBar")
+                row.sb:SetStatusBarColor(def.color.r, def.color.g, def.color.b, 0.8)
+                row.text:SetText(i .. ". " .. def.name)
+                
+                row:SetScript("OnEnter", function() 
+                    row.border:SetBackdropBorderColor(1, 0.8, 0, 1)
+                    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+                    GameTooltip:AddLine((L["Click to configure: "] or "点击进入详细设置: ") .. def.name, 1, 1, 1)
+                    GameTooltip:Show()
+                end)
+                row:SetScript("OnLeave", function() row.border:SetBackdropBorderColor(0, 0, 0, 1); GameTooltip:Hide() end)
+                row:SetScript("OnClick", function()
+                    if def.tab then
+                        WF.UI.CurrentNodeKey = def.tab
+                        WF.UI:RefreshCurrentPanel()
+                        if type(WF.UI.RefreshMenu) == "function" then WF.UI:RefreshMenu() end
+                        if type(WF.UI.RenderMenu) == "function" then WF.UI:RenderMenu() end
+                    end
+                end)
+                
+                if key ~= "monitor" then
+                    local state = false
+                    if key == "mana" then state = specCfg.showMana elseif key == "power" then state = specCfg.showPower elseif key == "class" then state = specCfg.showClass end
+                    row.enableBtn.Text:SetText(state and (L["Module Enabled"] or "|cff00ff00[ 已启用 ]|r") or (L["Module Disabled"] or "|cffff0000[ 已禁用 ]|r"))
+                    row.enableBtn:SetScript("OnClick", function()
+                        if key == "mana" then specCfg.showMana = not specCfg.showMana elseif key == "power" then specCfg.showPower = not specCfg.showPower elseif key == "class" then specCfg.showClass = not specCfg.showClass end
+                        WF.UI:RefreshCurrentPanel(); CR:UpdateLayout()
+                    end)
+                    row.enableBtn:Show(); row.text:SetPoint("LEFT", row, "LEFT", 10, 0)
+                else
+                    row.enableBtn:Hide(); row.text:SetPoint("LEFT", row, "LEFT", 10, 0)
+                end
+                
+                row.btnUp:SetScript("OnClick", function()
+                    if i > 1 then local temp = db.sortOrder[i-1]; db.sortOrder[i-1] = db.sortOrder[i]; db.sortOrder[i] = temp; WF.UI:RefreshCurrentPanel(); CR:UpdateLayout() end
+                end)
+                row.btnUp:SetEnabled(i > 1); row.btnUp:SetAlpha(i > 1 and 1 or 0.3)
+                
+                row.btnDown:SetScript("OnClick", function()
+                    if i < #sortOrder then local temp = db.sortOrder[i+1]; db.sortOrder[i+1] = db.sortOrder[i]; db.sortOrder[i] = temp; WF.UI:RefreshCurrentPanel(); CR:UpdateLayout() end
+                end)
+                row.btnDown:SetEnabled(i < #sortOrder); row.btnDown:SetAlpha(i < #sortOrder and 1 or 0.3)
+                
+                row:Show(); y = y - 35
+            end
+        end
+        for i = #sortOrder + 1, 10 do if scrollChild["CR_SortRow_"..i] then scrollChild["CR_SortRow_"..i]:Hide() end end
+        
+        return y
     end)
 
     WF.UI:RegisterPanel("classResource_Power", function(scrollChild, ColW)
@@ -571,16 +737,13 @@ if WF.UI then
         local db = GetCurrentSpecConfig(specId)
         local lineDB = { line = CR.selectedThresholdLine or 1 }
         local opts = { 
-            { type = "group", key = "p1", text = L["Text Toggle"] or "文本开关", childs = {
-                { type = "toggle", key = "textPower", db = db, text = L["Show Text"] or "显示文字" },
-            }},
             { type = "group", key = "p2", text = L["Visuals"] or "视觉选项", childs = {
-                -- 【核心修复】：能量条补上缺失的 Height 高度滑块！
                 { type = "slider", key = "height", db = db.power, text = L["Height"] or "高度", min=2, max=50, step=1 },
                 { type = "toggle", key = "useCustomColor", db = db.power, text = L["Custom Color"] or "自定义前景色" },
                 { type = "color", key = "customColor", db = db.power, text = L["Color"] or "颜色" },
             }},
             { type = "group", key = "p3", text = L["Text Layout"] or "文字排版", childs = {
+                { type = "toggle", key = "textPower", db = db, text = L["Show Text"] or "启用并显示该层文本" },
                 { type = "dropdown", key = "textFormat", db = db.power, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
                 { type = "dropdown", key = "textAnchor", db = db.power, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
                 { type = "slider", key = "xOffset", db = db.power, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
@@ -596,7 +759,7 @@ if WF.UI then
                 { type = "color", key = "color", db = db.power.thresholdLines[lineDB.line], text = L["Color"] or "颜色" },
             }}
         }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() if lineDB.line ~= CR.selectedThresholdLine then CR.selectedThresholdLine = lineDB.line; WF.UI:RefreshCurrentPanel() else CR:UpdateLayout(); CR:DynamicTick() end end)
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() if lineDB.line ~= CR.selectedThresholdLine then CR.selectedThresholdLine = lineDB.line; WF.UI:RefreshCurrentPanel() else CR:UpdateLayout() end end)
     end)
 
     WF.UI:RegisterPanel("classResource_Class", function(scrollChild, ColW)
@@ -604,15 +767,13 @@ if WF.UI then
         local db = GetCurrentSpecConfig(specId)
         local cDB = { tempC = db.class.customColors[playerClass] or {r=1,g=1,b=1}, tempE = db.class.useCustomColors[playerClass] or false }
         local opts = {
-            { type = "group", key = "c1", text = L["Text Toggle"] or "文本开关", childs = {
-                { type = "toggle", key = "textClass", db = db, text = L["Show Text"] or "显示文字" },
-            }},
             { type = "group", key = "c2", text = L["Visuals"] or "视觉选项", childs = {
                 { type = "slider", key = "height", db = db.class, text = L["Height"] or "高度", min=2, max=50, step=1 },
                 { type = "toggle", key = "tempE", db = cDB, text = L["Custom Color"] or "自定义前景色" },
                 { type = "color", key = "tempC", db = cDB, text = L["Color"] or "颜色" },
             }},
             { type = "group", key = "c3", text = L["Text Layout"] or "文字排版", childs = {
+                { type = "toggle", key = "textClass", db = db, text = L["Show Text"] or "启用并显示该层文本" },
                 { type = "dropdown", key = "textFormat", db = db.class, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
                 { type = "dropdown", key = "textAnchor", db = db.class, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
                 { type = "slider", key = "xOffset", db = db.class, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
@@ -621,22 +782,20 @@ if WF.UI then
                 { type = "color", key = "color", db = db.class, text = L["Font Color"] or "文字颜色" },
             }}
         }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() db.class.useCustomColors[playerClass] = cDB.tempE; db.class.customColors[playerClass] = cDB.tempC; CR:UpdateLayout(); CR:DynamicTick() end)
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() db.class.useCustomColors[playerClass] = cDB.tempE; db.class.customColors[playerClass] = cDB.tempC; CR:UpdateLayout() end)
     end)
 
     WF.UI:RegisterPanel("classResource_Mana", function(scrollChild, ColW)
         local specId = CR.selectedSpecForConfig or GetCurrentContextID()
         local db = GetCurrentSpecConfig(specId)
         local opts = {
-            { type = "group", key = "m1", text = L["Text Toggle"] or "文本开关", childs = {
-                { type = "toggle", key = "textMana", db = db, text = L["Show Text"] or "显示文字" },
-            }},
             { type = "group", key = "m2", text = L["Visuals"] or "视觉选项", childs = {
                 { type = "slider", key = "height", db = db.mana, text = L["Height"] or "高度", min=2, max=50, step=1 },
                 { type = "toggle", key = "useCustomColor", db = db.mana, text = L["Custom Color"] or "自定义前景色" },
                 { type = "color", key = "customColor", db = db.mana, text = L["Color"] or "颜色" },
             }},
             { type = "group", key = "m3", text = L["Text Layout"] or "文字排版", childs = {
+                { type = "toggle", key = "textMana", db = db, text = L["Show Text"] or "启用并显示该层文本" },
                 { type = "dropdown", key = "textFormat", db = db.mana, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
                 { type = "dropdown", key = "textAnchor", db = db.mana, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
                 { type = "slider", key = "xOffset", db = db.mana, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
@@ -645,6 +804,6 @@ if WF.UI then
                 { type = "color", key = "color", db = db.mana, text = L["Font Color"] or "文字颜色" },
             }}
         }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() CR:UpdateLayout(); CR:DynamicTick() end)
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() CR:UpdateLayout() end)
     end)
 end
