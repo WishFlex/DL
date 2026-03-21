@@ -9,7 +9,7 @@ local LSM = LibStub("LibSharedMedia-3.0", true)
 local LCG = LibStub("LibCustomGlow-1.0", true)
 
 local AuraGlowMod = CreateFrame("Frame")
-AuraGlowMod.hiddenAuras = {}
+WF.AuraGlowAPI = AuraGlowMod 
 local BaseSpellCache = {}
 local targetAuraCache = {}
 
@@ -23,27 +23,29 @@ AuraGlowMod.trackedAuras = {}
 AuraGlowMod.manualTrackers = {} 
 
 -- =========================================
--- [默认配置]
+-- [默认配置与数据初始化]
 -- =========================================
 local DefaultConfig = {
     enable = true,
     independent = { size = 45, gap = 2, growth = "LEFT" },
     text = { font = "Expressway", fontSize = 20, fontOutline = "OUTLINE", color = {r = 1, g = 0.82, b = 0}, textAnchor = "CENTER", offsetX = 0, offsetY = 0 },
     independentText = { enable = false, font = "Expressway", fontSize = 20, fontOutline = "OUTLINE", color = {r = 1, g = 0.82, b = 0}, textAnchor = "CENTER", offsetX = 0, offsetY = 0 },
-    
     glowEnable = true, glowType = "pixel", glowUseCustomColor = false, glowColor = {r = 1, g = 0.82, b = 0, a = 1},
     glowPixelLines = 8, glowPixelFrequency = 0.25, glowPixelLength = 0, glowPixelThickness = 2, glowPixelXOffset = 0, glowPixelYOffset = 0,
     glowAutocastParticles = 4, glowAutocastFrequency = 0.2, glowAutocastScale = 1, glowAutocastXOffset = 0, glowAutocastYOffset = 0,
     glowButtonFrequency = 0, glowProcDuration = 1, glowProcXOffset = 0, glowProcYOffset = 0,
+    spells = {} 
 }
 
--- =========================================
--- [核心工具函数]
--- =========================================
-local function GetSpellDB()
-    if not WishFlexDB.global then WishFlexDB.global = {} end
-    if type(WishFlexDB.global.spellDB) ~= "table" then WishFlexDB.global.spellDB = {} end
-    return WishFlexDB.global.spellDB
+local function GetDB()
+    if not WF.db.auraGlow then WF.db.auraGlow = {} end
+    local db = WF.db.auraGlow
+    for k, v in pairs(DefaultConfig) do if db[k] == nil then db[k] = v end end
+    for k, v in pairs(DefaultConfig.independent) do if db.independent[k] == nil then db.independent[k] = v end end
+    for k, v in pairs(DefaultConfig.text) do if db.text[k] == nil then db.text[k] = v end end
+    for k, v in pairs(DefaultConfig.independentText) do if db.independentText[k] == nil then db.independentText[k] = v end end
+    if type(db.spells) ~= "table" then db.spells = {} end
+    return db
 end
 
 local function IsSafeValue(val) return val ~= nil and (type(issecretvalue) ~= "function" or not issecretvalue(val)) end
@@ -61,11 +63,7 @@ end
 local function MatchesSpellID(info, targetID)
     if not info then return false end
     if IsSafeValue(info.spellID) and (info.spellID == targetID or info.overrideSpellID == targetID) then return true end
-    if info.linkedSpellIDs then 
-        for i = 1, #info.linkedSpellIDs do 
-            if IsSafeValue(info.linkedSpellIDs[i]) and info.linkedSpellIDs[i] == targetID then return true end 
-        end 
-    end
+    if info.linkedSpellIDs then for i = 1, #info.linkedSpellIDs do if IsSafeValue(info.linkedSpellIDs[i]) and info.linkedSpellIDs[i] == targetID then return true end end end
     return GetBaseSpellFast(info.spellID) == targetID
 end
 
@@ -76,44 +74,133 @@ local function VerifyAuraAlive(checkID, checkUnit)
 end
 
 local function GetCropCoords(w, h)
-    local l, r, t, b = 0.08, 0.92, 0.08, 0.92 -- 原生裁切比例
+    local l, r, t, b = 0.08, 0.92, 0.08, 0.92
     if not w or not h or h == 0 or w == 0 then return l, r, t, b end
     local ratio = w / h
     if math.abs(ratio - 1) < 0.05 then return l, r, t, b end
-    if ratio > 1 then
-        local crop = (1 - (1/ratio)) / 2; return l, r, t + (b - t) * crop, b - (b - t) * crop
-    else
-        local crop = (1 - ratio) / 2; return l + (r - l) * crop, r - (r - l) * crop, t, b
-    end
+    if ratio > 1 then local crop = (1 - (1/ratio)) / 2; return l, r, t + (b - t) * crop, b - (b - t) * crop
+    else local crop = (1 - ratio) / 2; return l + (r - l) * crop, r - (r - l) * crop, t, b end
 end
 
 -- =========================================
--- [UI 视觉与渲染]
+-- [渲染与发光核心]
 -- =========================================
-local function SyncTextAndVisuals(frame)
-    local globalCfg = WF.db.auraGlow.text
-    local indCfg = WF.db.auraGlow.independentText
-    local cfg = (frame.isIndependent and indCfg.enable) and indCfg or globalCfg
+local function SyncTextAndVisuals(frame, overrideCfg)
+    local db = GetDB()
+    local globalCfg = db.text
+    local indCfg = db.independentText
+    local cfg = overrideCfg or ((frame.isIndependent and indCfg.enable) and indCfg or globalCfg)
 
     local fontPath = (LSM and LSM:Fetch('font', cfg.font)) or STANDARD_TEXT_FONT
-    if frame.lastFont ~= fontPath or frame.lastSize ~= cfg.fontSize or frame.lastOutline ~= cfg.fontOutline then
-        frame.durationText:SetFont(fontPath, cfg.fontSize, cfg.fontOutline)
-        frame.lastFont, frame.lastSize, frame.lastOutline = fontPath, cfg.fontSize, cfg.fontOutline
+    local fSize = tonumber(cfg.fontSize) or 20
+    if frame.lastFont ~= fontPath or frame.lastSize ~= fSize or frame.lastOutline ~= cfg.fontOutline then
+        frame.durationText:SetFont(fontPath, fSize, cfg.fontOutline or "OUTLINE")
+        frame.lastFont, frame.lastSize, frame.lastOutline = fontPath, fSize, cfg.fontOutline
     end
-    if frame.lastR ~= cfg.color.r or frame.lastG ~= cfg.color.g or frame.lastB ~= cfg.color.b then
-        frame.durationText:SetTextColor(cfg.color.r, cfg.color.g, cfg.color.b)
-        frame.lastR, frame.lastG, frame.lastB = cfg.color.r, cfg.color.g, cfg.color.b
+    
+    local color = cfg.color or {r=1, g=0.82, b=0}
+    if frame.lastR ~= color.r or frame.lastG ~= color.g or frame.lastB ~= color.b then
+        frame.durationText:SetTextColor(color.r, color.g, color.b)
+        frame.lastR, frame.lastG, frame.lastB = color.r, color.g, color.b
     end
     
     local anchor = cfg.textAnchor or "CENTER"
-    if frame.lastOffsetX ~= cfg.offsetX or frame.lastOffsetY ~= cfg.offsetY or frame.lastAnchor ~= anchor then
+    local ox, oy = tonumber(cfg.offsetX) or 0, tonumber(cfg.offsetY) or 0
+    if frame.lastOffsetX ~= ox or frame.lastOffsetY ~= oy or frame.lastAnchor ~= anchor then
         frame.durationText:ClearAllPoints()
-        frame.durationText:SetPoint(anchor, frame, anchor, cfg.offsetX, cfg.offsetY)
-        frame.lastOffsetX, frame.lastOffsetY = cfg.offsetX, cfg.offsetY
-        frame.lastAnchor = anchor
+        frame.durationText:SetPoint(anchor, frame, anchor, ox, oy)
+        frame.lastOffsetX, frame.lastOffsetY, frame.lastAnchor = ox, oy, anchor
     end
 end
 
+local function ApplyCustomGlowToFrame(frame, glowKey)
+    local cfg = GetDB()
+    if not LCG then return end
+    
+    LCG.PixelGlow_Stop(frame, glowKey)
+    LCG.AutoCastGlow_Stop(frame, glowKey)
+    LCG.ButtonGlow_Stop(frame)
+    LCG.ProcGlow_Stop(frame, glowKey)
+
+    if not cfg.glowEnable then return end
+    
+    local c = cfg.glowColor or {r=1, g=1, b=1, a=1}
+    local colorArr = cfg.glowUseCustomColor and {c.r, c.g, c.b, c.a} or nil
+    local t = cfg.glowType or "pixel"
+    
+    if t == "pixel" then
+        local len = tonumber(cfg.glowPixelLength) or 0; if len == 0 then len = nil end
+        LCG.PixelGlow_Start(frame, colorArr, tonumber(cfg.glowPixelLines) or 8, tonumber(cfg.glowPixelFrequency) or 0.25, len, tonumber(cfg.glowPixelThickness) or 2, tonumber(cfg.glowPixelXOffset) or 0, tonumber(cfg.glowPixelYOffset) or 0, false, glowKey)
+    elseif t == "autocast" then
+        LCG.AutoCastGlow_Start(frame, colorArr, tonumber(cfg.glowAutocastParticles) or 4, tonumber(cfg.glowAutocastFrequency) or 0.2, tonumber(cfg.glowAutocastScale) or 1, tonumber(cfg.glowAutocastXOffset) or 0, tonumber(cfg.glowAutocastYOffset) or 0, glowKey)
+    elseif t == "button" then
+        local freq = tonumber(cfg.glowButtonFrequency) or 0; if freq == 0 then freq = nil end
+        LCG.ButtonGlow_Start(frame, colorArr, freq)
+    elseif t == "proc" then
+        LCG.ProcGlow_Start(frame, {color = colorArr, duration = tonumber(cfg.glowProcDuration) or 1, xOffset = tonumber(cfg.glowProcXOffset) or 0, yOffset = tonumber(cfg.glowProcYOffset) or 0, key = glowKey})
+    end
+end
+
+local function ToggleGlow(frame, glowKey, shouldGlow, forceRefresh)
+    if not frame or not LCG then return end
+    if shouldGlow then
+        if not frame._isGlowing or forceRefresh then
+            frame._isGlowing = true
+            ApplyCustomGlowToFrame(frame, glowKey)
+        end
+    else
+        if frame._isGlowing or forceRefresh then
+            frame._isGlowing = false
+            LCG.PixelGlow_Stop(frame, glowKey)
+            LCG.AutoCastGlow_Stop(frame, glowKey)
+            LCG.ButtonGlow_Stop(frame)
+            LCG.ProcGlow_Stop(frame, glowKey)
+        end
+    end
+end
+
+-- =========================================
+-- [沙盒 API：专供可视化面板调用的预览逻辑]
+-- =========================================
+function AuraGlowMod:ApplyPreview(frame, spellID, isInd)
+    local db = GetDB()
+    local sDB = db.spells[tostring(spellID)] or {}
+    
+    local shouldGlow = false
+    if isInd then shouldGlow = (sDB.iconGlowEnable ~= false)
+    else shouldGlow = sDB.glowEnable end
+    
+    ToggleGlow(frame, "WishAuraPreviewGlow", shouldGlow, true)
+    
+    if not frame.agDurationText then
+        frame.agDurationText = frame:CreateFontString(nil, "OVERLAY")
+    end
+    
+    if shouldGlow or isInd then
+        -- 【核心修复】：必须先设置字体，再设置文本，否则会报 Font not set
+        local tCfg = (isInd and db.independentText.enable) and db.independentText or db.text
+        local fontPath = (LSM and LSM:Fetch("font", tCfg.font or "Expressway")) or STANDARD_TEXT_FONT
+        local fSize = tonumber(tCfg.fontSize) or 20
+        frame.agDurationText:SetFont(fontPath, fSize, tCfg.fontOutline or "OUTLINE")
+        
+        frame.agDurationText:SetText("12.5")
+        frame.agDurationText:Show()
+        
+        local c = tCfg.color or {r=1, g=0.82, b=0}
+        frame.agDurationText:SetTextColor(c.r, c.g, c.b)
+        
+        frame.agDurationText:ClearAllPoints()
+        local anc = tCfg.textAnchor or "CENTER"
+        local ox, oy = tonumber(tCfg.offsetX) or 0, tonumber(tCfg.offsetY) or 0
+        frame.agDurationText:SetPoint(anc, frame, anc, ox, oy)
+    else
+        frame.agDurationText:Hide()
+    end
+end
+
+-- =========================================
+-- [实际游戏战斗监测引擎]
+-- =========================================
 local function SnapOverlayToFrame(overlay, sourceFrame)
     if sourceFrame and sourceFrame:IsVisible() then
         if sourceFrame.GetCenter then
@@ -140,59 +227,12 @@ local function SnapOverlayToFrame(overlay, sourceFrame)
     return false
 end
 
-local function ApplyCustomGlowToFrame(frame, glowKey)
-    local cfg = WF.db.auraGlow
-    if not LCG then return end
-    
-    LCG.PixelGlow_Stop(frame, glowKey)
-    LCG.AutoCastGlow_Stop(frame, glowKey)
-    LCG.ButtonGlow_Stop(frame)
-    LCG.ProcGlow_Stop(frame, glowKey)
-
-    if not cfg.glowEnable then return end
-    
-    local c = cfg.glowColor or {r=1, g=1, b=1, a=1}
-    local colorArr = cfg.glowUseCustomColor and {c.r, c.g, c.b, c.a} or nil
-    local t = cfg.glowType or "pixel"
-    
-    if t == "pixel" then
-        local len = cfg.glowPixelLength; if len == 0 then len = nil end
-        LCG.PixelGlow_Start(frame, colorArr, cfg.glowPixelLines, cfg.glowPixelFrequency, len, cfg.glowPixelThickness, cfg.glowPixelXOffset, cfg.glowPixelYOffset, false, glowKey)
-    elseif t == "autocast" then
-        LCG.AutoCastGlow_Start(frame, colorArr, cfg.glowAutocastParticles, cfg.glowAutocastFrequency, cfg.glowAutocastScale, cfg.glowAutocastXOffset, cfg.glowAutocastYOffset, glowKey)
-    elseif t == "button" then
-        local freq = cfg.glowButtonFrequency; if freq == 0 then freq = nil end
-        LCG.ButtonGlow_Start(frame, colorArr, freq)
-    elseif t == "proc" then
-        LCG.ProcGlow_Start(frame, {color = colorArr, duration = cfg.glowProcDuration, xOffset = cfg.glowProcXOffset, yOffset = cfg.glowProcYOffset, key = glowKey})
-    end
-end
-
-local function ToggleGlow(frame, glowKey, shouldGlow, forceRefresh)
-    if not frame or not LCG then return end
-    if shouldGlow then
-        if not frame._isGlowing or forceRefresh then
-            frame._isGlowing = true
-            ApplyCustomGlowToFrame(frame, glowKey)
-        end
-    else
-        if frame._isGlowing or forceRefresh then
-            frame._isGlowing = false
-            LCG.PixelGlow_Stop(frame, glowKey)
-            LCG.AutoCastGlow_Stop(frame, glowKey)
-            LCG.ButtonGlow_Stop(frame)
-            LCG.ProcGlow_Stop(frame, glowKey)
-        end
-    end
-end
-
 local function CreateBaseFrame(spellID, isIndependent)
     local frame = CreateFrame("Frame", nil, UIParent, isIndependent and "BackdropTemplate" or nil)
     frame:SetFrameStrata("HIGH") 
     frame.isIndependent = isIndependent
     
     if isIndependent then 
-        -- 原生黑边框
         frame:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
         frame:SetBackdropBorderColor(0, 0, 0, 1)
     end
@@ -246,11 +286,9 @@ local function GetIndependentIcon(spellID)
     return IndependentFrames[spellID]
 end
 
--- =========================================
--- [更新与布局逻辑]
--- =========================================
 function AuraGlowMod:UpdateGlows(forceUpdate)
-    if not WF.db.auraGlow.enable then 
+    local db = GetDB()
+    if not db.enable then 
         for _, f in pairs(OverlayFrames) do ToggleGlow(f, "WishAuraOverlayGlow", false, true); f:Hide() end
         for _, f in pairs(IndependentFrames) do ToggleGlow(f, "WishAuraIndGlow", false, true); f:Hide() end
         return 
@@ -283,18 +321,18 @@ function AuraGlowMod:UpdateGlows(forceUpdate)
     local currentSpecID = 0
     pcall(function() currentSpecID = GetSpecializationInfo(GetSpecialization()) or 0 end)
 
-    for spellIDStr, spellData in pairs(GetSpellDB()) do
+    for spellIDStr, spellData in pairs(db.spells) do
         local spellID = tonumber(spellIDStr)
-        if spellData.auraGlow and (not spellData.class or spellData.class == "ALL" or spellData.class == playerClass) then
-            local sSpec = spellData.spec or 0
+        if (not spellData.class or spellData.class == "ALL" or spellData.class == playerClass) then
+            local sSpec = tonumber(spellData.spec) or 0
             if sSpec == 0 or sSpec == currentSpecID then
-                local wantGlow = spellData.auraGlow.glowEnable
-                local wantIcon = spellData.auraGlow.iconEnable
-                local wantIconGlow = spellData.auraGlow.iconGlowEnable ~= false 
+                local wantGlow = spellData.glowEnable
+                local wantIcon = spellData.iconEnable
+                local wantIconGlow = spellData.iconGlowEnable ~= false 
 
                 if wantGlow or wantIcon then
-                    local buffID = spellData.buffID or spellID
-                    local customDuration = spellData.auraGlow.duration or 0
+                    local buffID = tonumber(spellData.buffID) or spellID
+                    local customDuration = tonumber(spellData.duration) or 0
                     
                     local skillFrame = nil
                     if wantGlow then
@@ -410,8 +448,8 @@ function AuraGlowMod:UpdateGlows(forceUpdate)
     end
 
     if self.AuraGlowAnchor then
-        local cfg = WF.db.auraGlow.independent
-        local s = cfg.size or 45; local gap = cfg.gap or 2; local growth = cfg.growth or "LEFT"
+        local cfg = db.independent
+        local s = tonumber(cfg.size) or 45; local gap = tonumber(cfg.gap) or 2; local growth = cfg.growth or "LEFT"
         local numIcons = #activeIndependentIcons
         
         local startX = 0
@@ -445,7 +483,7 @@ function AuraGlowMod:UpdateGlows(forceUpdate)
 end
 
 -- =========================================
--- [事件与初始化系统]
+-- [事件监测]
 -- =========================================
 local updatePending = false
 local function RequestUpdateGlows()
@@ -461,16 +499,17 @@ AuraGlowMod:SetScript("OnEvent", function(self, event, unit, _, spellID)
         if unit == "player" or unit == "target" then RequestUpdateGlows() end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         if unit ~= "player" or not WF.db.auraGlow.enable then return end
+        local triggered = false
         local currentSpecID = 0
         pcall(function() currentSpecID = GetSpecializationInfo(GetSpecialization()) or 0 end)
-        local triggered = false
-        for sIDStr, spellData in pairs(GetSpellDB()) do
-            if spellData.auraGlow and (spellData.auraGlow.glowEnable or spellData.auraGlow.iconEnable) and (not spellData.class or spellData.class == "ALL" or spellData.class == playerClass) then
-                local sSpec = spellData.spec or 0
+        
+        for sIDStr, spellData in pairs(GetDB().spells) do
+            if (spellData.glowEnable or spellData.iconEnable) then
+                local sSpec = tonumber(spellData.spec) or 0
                 if sSpec == 0 or sSpec == currentSpecID then
                     local sID = tonumber(sIDStr)
-                    local bID = spellData.buffID or sID
-                    local dur = spellData.auraGlow.duration or 0
+                    local bID = tonumber(spellData.buffID) or sID
+                    local dur = tonumber(spellData.duration) or 0
                     
                     if dur > 0 and (spellID == sID or spellID == bID) then
                         self.manualTrackers = self.manualTrackers or {}
@@ -491,31 +530,17 @@ local function SafeHook(object, funcName, callback)
 end
 
 local function InitAuraGlow()
-    -- 1. 确保配置存在
-    if not WF.db.auraGlow then WF.db.auraGlow = {} end
-    for k, v in pairs(DefaultConfig) do
-        if WF.db.auraGlow[k] == nil then WF.db.auraGlow[k] = v end
-    end
-    for k, v in pairs(DefaultConfig.independent) do
-        if WF.db.auraGlow.independent[k] == nil then WF.db.auraGlow.independent[k] = v end
-    end
-    
+    GetDB()
     if not WF.db.auraGlow.enable then return end
 
-    -- 2. 创建独立锚点框架
     AuraGlowMod.AuraGlowAnchor = CreateFrame("Frame", "WishFlex_AuraGlowIconAnchor", UIParent)
     AuraGlowMod.AuraGlowAnchor:SetPoint("CENTER", UIParent, "CENTER", 180, 0)
     AuraGlowMod.AuraGlowAnchor:SetSize(45, 45)
+    if WF.CreateMover then WF:CreateMover(AuraGlowMod.AuraGlowAnchor, "WishFlexAuraGlowIconMover", {"CENTER", UIParent, "CENTER", 180, 0}, 45, 45, "WishFlex: " .. (L["Independent Aura Icon"] or "独立图标实体组")) end
     
-    -- 简易锚点预留 (稍后统一写 UI 拖动功能)
-    local mover = CreateFrame("Frame", "WishFlexAuraGlowIconMover", UIParent)
-    mover:SetSize(45, 45)
-    mover:SetPoint("CENTER", UIParent, "CENTER", 180, 0)
-    mover.isWishFlexMover = true 
-    AuraGlowMod.AuraGlowAnchor.mover = mover
-    AuraGlowMod.AuraGlowAnchor:SetPoint("CENTER", mover, "CENTER")
+    local mover = _G["WishFlexAuraGlowIconMover"]
+    if mover then AuraGlowMod.AuraGlowAnchor.mover = mover; AuraGlowMod.AuraGlowAnchor:SetPoint("CENTER", mover, "CENTER") end
 
-    -- 3. 注册事件
     AuraGlowMod:RegisterEvent("UNIT_AURA")
     AuraGlowMod:RegisterEvent("PLAYER_TARGET_CHANGED")
     AuraGlowMod:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -523,7 +548,6 @@ local function InitAuraGlow()
     AuraGlowMod:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     AuraGlowMod:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     
-    -- 4. 挂钩暴雪原生冷却框架
     local viewers = { _G.BuffIconCooldownViewer, _G.EssentialCooldownViewer, _G.UtilityCooldownViewer, _G.BuffBarCooldownViewer }
     for _, viewer in ipairs(viewers) do
         if viewer then
@@ -540,5 +564,4 @@ local function InitAuraGlow()
     RequestUpdateGlows()
 end
 
--- 注册到 WishFlex 核心
 WF:RegisterModule("auraGlow", L["Aura Glow"] or "技能状态高亮", InitAuraGlow)

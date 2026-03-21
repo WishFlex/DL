@@ -25,24 +25,14 @@ Core.lua
 UI.lua
 
 # 4. 加载各个功能模块
-# (注意：为了防止刚脱离 ElvUI 时游戏疯狂报错，这里先全部注释掉。我们每重构好一个文件，你就删掉它前面的 # 号)
-# Modules\KeyBinder.lua
-# Modules\RareAlert.lua
-# Modules\VehicleBar.lua
-# Modules\StripeSkin.lua
 Modules\CooldownCustom.lua
 Modules\ClassResource.lua
 Modules\home.lua
 Modules\WishMonitor.lua
-# Modules\Narrative.lua
 Modules\CooldownTracker.lua
 # Modules\WishTargetAlert.lua
-# Modules\AuraGlow.lua
+Modules\AuraGlow.lua
 # Modules\WorldMarker.lua
-# Modules\SmartHide.lua
-# Modules\PetBattle.lua
 Modules\Glow.lua
-# Modules\MacroUI.lua
 # Modules\RightClick.lua
 # Modules\SpellAlpha.lua
-Modules\ChatSetup.lua
