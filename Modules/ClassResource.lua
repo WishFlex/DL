@@ -128,7 +128,6 @@ local function GetCurrentSpecConfig(ctxId)
     return cfg
 end
 
--- 【完美重构：提供全插件通用的计算宽度接口】
 function CR:GetActiveWidth()
     local db = GetDB()
     local specCfg = GetCurrentSpecConfig(GetCurrentContextID())
@@ -305,7 +304,6 @@ function CR:UpdateLayout()
 
     local wmShow = false
     local wmAnchor = nil
-    local wmDB = WF.db.wishMonitor
     if WF.WishMonitorAPI and WF.WishMonitorAPI.baseAnchor then
         wmAnchor = WF.WishMonitorAPI.baseAnchor
         if db.enable and WF.WishMonitorAPI.ActiveFrames and #WF.WishMonitorAPI.ActiveFrames > 0 then wmShow = true end
@@ -336,34 +334,18 @@ function CR:UpdateLayout()
             end
             
             if item.show then
-                local isInd = false
-                local xOff, yOff = 0, 0
-                
-                if item.isMonitor then
-                    isInd = false
-                    xOff = 0
-                    yOff = 0
-                else
-                    isInd = item.cfg.independent
-                    xOff = tonumber(item.cfg.barXOffset) or 0
-                    yOff = tonumber(item.cfg.barYOffset) or 0
-                end
+                local isInd = false; local xOff, yOff = 0, 0
+                if item.isMonitor then isInd = false; xOff = 0; yOff = 0
+                else isInd = item.cfg.independent; xOff = tonumber(item.cfg.barXOffset) or 0; yOff = tonumber(item.cfg.barYOffset) or 0 end
                 
                 item.frame:ClearAllPoints()
                 if isInd then
-                    if not item.isMonitor then
-                        item.frame:SetPoint("CENTER", item.anchor.mover or item.anchor, "CENTER", xOff, yOff)
-                    end
+                    if not item.isMonitor then item.frame:SetPoint("CENTER", item.anchor.mover or item.anchor, "CENTER", xOff, yOff) end
                 else
                     if not lastStackedFrame then
-                        if db.alignWithCD and _G.EssentialCooldownViewer then
-                            item.frame:SetPoint("BOTTOM", _G.EssentialCooldownViewer, "TOP", xOff, (tonumber(db.alignYOffset) or 1) + yOff)
-                        else
-                            item.frame:SetPoint("CENTER", self.baseAnchor.mover or self.baseAnchor, "CENTER", xOff, yOff)
-                        end
-                    else
-                        item.frame:SetPoint("BOTTOM", lastStackedFrame, "TOP", xOff, (tonumber(specCfg.yOffset) or 1) + yOff)
-                    end
+                        if db.alignWithCD and _G.EssentialCooldownViewer then item.frame:SetPoint("BOTTOM", _G.EssentialCooldownViewer, "TOP", xOff, (tonumber(db.alignYOffset) or 1) + yOff)
+                        else item.frame:SetPoint("CENTER", self.baseAnchor.mover or self.baseAnchor, "CENTER", xOff, yOff) end
+                    else item.frame:SetPoint("BOTTOM", lastStackedFrame, "TOP", xOff, (tonumber(specCfg.yOffset) or 1) + yOff) end
                     lastStackedFrame = item.frame
                 end
             end
@@ -398,13 +380,13 @@ function CR:DynamicTick()
             local activeLines = 0
             for i = 1, 5 do
                 local cfgLine = specCfg.power.thresholdLines[i]
-                if cfgLine and cfgLine.enable and cfgLine.value > 0 and rawMax and rawMax > 0 and cfgLine.value <= rawMax then
+                if cfgLine and type(cfgLine) == "table" and cfgLine.enable and (tonumber(cfgLine.value) or 0) > 0 and rawMax and rawMax > 0 and tonumber(cfgLine.value) <= rawMax then
                     activeLines = activeLines + 1
                     local tLine = self.powerBar.thresholdLines[activeLines]
                     if not tLine then tLine = self.powerBar.statusBar:CreateTexture(nil, "OVERLAY", nil, 7); self.powerBar.thresholdLines[activeLines] = tLine end
                     local barWidth = self.powerBar.statusBar:GetWidth(); if not barWidth or barWidth == 0 then barWidth = (self.powerBar:GetWidth() or 250) - 2 end
-                    local posX = (cfgLine.value / rawMax) * barWidth; local tColor = cfgLine.color or {r=1, g=1, b=1, a=1}; local tThick = cfgLine.thickness or 1
-                    tLine:SetColorTexture(tColor.r, tColor.g, tColor.b, tColor.a); tLine:SetWidth(tThick); tLine:ClearAllPoints()
+                    local posX = (tonumber(cfgLine.value) / rawMax) * barWidth; local tColor = type(cfgLine.color) == "table" and cfgLine.color or {r=1, g=1, b=1, a=1}; local tThick = tonumber(cfgLine.thickness) or 1
+                    tLine:SetColorTexture(tColor.r or 1, tColor.g or 1, tColor.b or 1, tColor.a or 1); tLine:SetWidth(tThick); tLine:ClearAllPoints()
                     tLine:SetPoint("TOPLEFT", self.powerBar.statusBar, "TOPLEFT", posX - (tThick/2), 0); tLine:SetPoint("BOTTOMLEFT", self.powerBar.statusBar, "BOTTOMLEFT", posX - (tThick/2), 0)
                     tLine:Show()
                 end
@@ -442,8 +424,7 @@ function CR:CreateBarContainer(name, parent)
     local bar = CreateFrame("Frame", name, parent, "BackdropTemplate")
     AddPixelBorder(bar)
     local sb = CreateFrame("StatusBar", nil, bar)
-    sb:SetAllPoints(bar)
-    bar.statusBar = sb
+    sb:SetAllPoints(bar); bar.statusBar = sb
     local bg = sb:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); sb.bg = bg
     local gridFrame = CreateFrame("Frame", nil, bar); gridFrame:SetAllPoints(bar); gridFrame:SetFrameLevel(bar:GetFrameLevel() + 15); bar.gridFrame = gridFrame
     local textFrame = CreateFrame("Frame", nil, bar); textFrame:SetAllPoints(bar); textFrame:SetFrameLevel(bar:GetFrameLevel() + 50); bar.textFrame = textFrame
@@ -454,16 +435,11 @@ end
 function CR:CreateAnchor(name, title, defaultY, height)
     local anchor = CreateFrame("Frame", name, UIParent)
     anchor:SetPoint("CENTER", UIParent, "CENTER", 0, defaultY); anchor:SetSize(250, height)
-    if WF.CreateMover then 
-        WF:CreateMover(anchor, name.."Mover", {"CENTER", UIParent, "CENTER", 0, defaultY}, 250, height, title) 
-    end
+    if WF.CreateMover then WF:CreateMover(anchor, name.."Mover", {"CENTER", UIParent, "CENTER", 0, defaultY}, 250, height, title) end
     local moverName = name.."Mover"; local mover = _G[moverName]
     if mover then
         if WF.db.movers and WF.db.movers[moverName] then local p = WF.db.movers[moverName]; mover:ClearAllPoints(); mover:SetPoint(p.point, UIParent, p.relativePoint, p.xOfs, p.yOfs) end
-        if not mover._wishSaveHooked then
-            mover:HookScript("OnDragStop", function(self) if not WF.db.movers then WF.db.movers = {} end; local point, _, relativePoint, xOfs, yOfs = self:GetPoint(); WF.db.movers[self:GetName()] = { point = point, relativePoint = relativePoint, xOfs = xOfs, yOfs = yOfs } end)
-            mover._wishSaveHooked = true
-        end
+        if not mover._wishSaveHooked then mover:HookScript("OnDragStop", function(self) if not WF.db.movers then WF.db.movers = {} end; local point, _, relativePoint, xOfs, yOfs = self:GetPoint(); WF.db.movers[self:GetName()] = { point = point, relativePoint = relativePoint, xOfs = xOfs, yOfs = yOfs } end); mover._wishSaveHooked = true end
     end
     return anchor
 end
@@ -481,7 +457,6 @@ end
 
 local function InitClassResource()
     GetDB()
-    
     CR.baseAnchor = CR:CreateAnchor("WishFlex_BaseAnchor", "WishFlex: " .. (L["Global Layout Anchor"] or "全局排版起点"), -180, 14)
     CR.manaAnchor = CR:CreateAnchor("WishFlex_ManaAnchor", "WishFlex: [独立] " .. (L["Extra Mana Bar"] or "专属法力条"), -220, 10)
     CR.powerAnchor = CR:CreateAnchor("WishFlex_PowerAnchor", "WishFlex: [独立] " .. (L["Power Bar"] or "能量条"), -160, 14)
@@ -496,9 +471,7 @@ local function InitClassResource()
     CR.idleTimer = 0; CR.sleepMode = false; CR.hasActiveTimer = false
     CR.isRendering = false
     
-    if not WF.db.classResource.enable then
-        for i = 1, #CR.AllBars do CR.AllBars[i]:Hide() end
-    end
+    if not WF.db.classResource.enable then for i = 1, #CR.AllBars do CR.AllBars[i]:Hide() end end
     
     CR:RegisterEvent("PLAYER_ENTERING_WORLD", "UpdateLayout")
     CR:RegisterEvent("UNIT_DISPLAYPOWER", "UpdateLayout")
@@ -509,24 +482,20 @@ local function InitClassResource()
     CR:RegisterEvent("UNIT_POWER_FREQUENT", "WakeUp")
 
     C_Timer.After(0.8, function()
+        if WF.UI then
+            local combatMenuExists = false
+            if WF.UI.Menus then
+                for _, m in ipairs(WF.UI.Menus) do if m.id == "Combat" then combatMenuExists = true; break end end
+            end
+            if not combatMenuExists then
+                WF.UI:RegisterMenu({ id = "Combat", name = L["Combat"] or "战斗组件", type = "root", icon = "Interface\\AddOns\\WishFlex\\Media\\Icons\\zd", order = 10 })
+            end
+        end
         local CDMod = WF.CooldownCustomAPI or WF.CooldownCustom
-        if CDMod and CDMod.TriggerLayout then 
-            hooksecurefunc(CDMod, "TriggerLayout", function() if GetDB().alignWithCD then CR:UpdateLayout() end end) 
-        end
-        
-        if WF.WishMonitorAPI then
-            WF.WishMonitorAPI.UpdateAnchor = function() end 
-            
-            hooksecurefunc(WF.WishMonitorAPI, "Render", function()
-                if not CR.isRendering then
-                    CR:UpdateLayout()
-                end
-            end)
-        end
-        
+        if CDMod and CDMod.TriggerLayout then hooksecurefunc(CDMod, "TriggerLayout", function() if GetDB().alignWithCD then CR:UpdateLayout() end end) end
+        if WF.WishMonitorAPI then WF.WishMonitorAPI.UpdateAnchor = function() end; hooksecurefunc(WF.WishMonitorAPI, "Render", function() if not CR.isRendering then CR:UpdateLayout() end end) end
         CR:UpdateLayout()
     end)
-    
     CR:OnContextChanged()
     
     local ticker = 0; CR.frameTick = 0
@@ -538,15 +507,7 @@ local function InitClassResource()
                 local sb = bar.statusBar
                 if sb._targetValue and not IsSecret(sb._targetValue) then
                     sb._currentValue = sb._currentValue or sb:GetValue() or 0
-                    if not IsSecret(sb._currentValue) then
-                        pcall(function()
-                            if sb._currentValue ~= sb._targetValue then
-                                local diff = sb._targetValue - sb._currentValue
-                                if math.abs(diff) < 0.01 then sb._currentValue = sb._targetValue else sb._currentValue = sb._currentValue + diff * 15 * elapsed end
-                                sb:SetValue(sb._currentValue)
-                            end
-                        end)
-                    end
+                    if not IsSecret(sb._currentValue) then pcall(function() if sb._currentValue ~= sb._targetValue then local diff = sb._targetValue - sb._currentValue; if math.abs(diff) < 0.01 then sb._currentValue = sb._targetValue else sb._currentValue = sb._currentValue + diff * 15 * elapsed end; sb:SetValue(sb._currentValue) end end) end
                 end
             end
         end
@@ -558,15 +519,14 @@ end
 
 WF:RegisterModule("classResource", L["Class Resource"] or "资源条", InitClassResource)
 
--- =========================================================================
--- [UI 动态注入引擎与可视化排序器]
--- =========================================================================
+-- ========================================================
+-- [深度整合：防抖动态沙盒投射与极速响应引擎]
+-- ========================================================
+CR.ExpandState = CR.ExpandState or { global = false }
+CR.Sandbox = CR.Sandbox or { selectedBar = nil }
+
 if WF.UI then
-    WF.UI:RegisterMenu({ id = "ClassResource", parent = "Combat", name = L["Class Resource"] or "职业资源条", type = "group", order = 25 })
-    WF.UI:RegisterMenu({ id = "CR_Global", parent = "ClassResource", name = L["Global Settings"] or "全局设置", key = "classResource_Global", order = 1 })
-    WF.UI:RegisterMenu({ id = "CR_Power", parent = "ClassResource", name = L["Power Bar"] or "能量条", key = "classResource_Power", order = 2 })
-    WF.UI:RegisterMenu({ id = "CR_Class", parent = "ClassResource", name = L["Class Resource Bar"] or "主资源条", key = "classResource_Class", order = 3 })
-    WF.UI:RegisterMenu({ id = "CR_Mana", parent = "ClassResource", name = L["Extra Mana Bar"] or "额外法力条", key = "classResource_Mana", order = 4 })
+    WF.UI:RegisterMenu({ id = "ClassResource", parent = "Combat", name = L["Class Resource"] or "职业资源与监控", key = "classResource_Global", order = 25 })
 
     local function GetSpecOptions()
         local opts = {}
@@ -577,233 +537,481 @@ if WF.UI then
 
     local function GetTextureOptions()
         local opts = {}
-        if LSM then
-            local list = LSM:List("statusbar")
-            if list then for i = 1, #list do table.insert(opts, { text = list[i], value = list[i] }) end end
-        end
+        if LSM then local list = LSM:List("statusbar"); if list then for i = 1, #list do table.insert(opts, { text = list[i], value = list[i] }) end end end
         if #opts == 0 then table.insert(opts, {text = "Wish2", value = "Wish2"}) end
         return opts
-    end
-    
-    local function ForceSetButtonText(btn, text)
-        if not btn then return end
-        pcall(function() if type(btn.SetText) == "function" then btn:SetText(text) end end)
-        for _, region in pairs({btn:GetRegions()}) do if region:IsObjectType("FontString") then pcall(function() region:SetText(text) end) end end
     end
 
     WF.UI:RegisterPanel("classResource_Global", function(scrollChild, ColW)
         local db = GetDB()
         local tempDB = { spec = CR.selectedSpecForConfig or GetCurrentContextID() }
         local specCfg = GetCurrentSpecConfig(tempDB.spec)
-        local y = -10
         
-        CR.ExpandState = CR.ExpandState or { global = false }
+        if not specCfg.power.thresholdLines then specCfg.power.thresholdLines = {} end
+        for i = 1, 5 do if type(specCfg.power.thresholdLines[i]) ~= "table" then specCfg.power.thresholdLines[i] = {enable=false, value=0, thickness=2, color={r=1,g=0,b=0}} end end
 
-        local tGlobal = L["Global Settings"] or "全局排版设置"
-        local btnGlobal = scrollChild.CR_BtnGlobal
-        if not btnGlobal then
-            btnGlobal = WF.UI.Factory:CreateFlatButton(scrollChild, "", function() CR.ExpandState.global = not CR.ExpandState.global; WF.UI:RefreshCurrentPanel() end)
-            scrollChild.CR_BtnGlobal = btnGlobal
+        local targetWidth = CR.Sandbox.selectedBar and 1050 or 950
+        
+        -- 【核心修复1】彻底锁死左侧沙盒宽度，彻底告别晃眼缩放闪烁
+        local leftColW = 475
+        local rightColW = targetWidth - leftColW - 35
+        
+        local leftX = 15; local rightX = 15 + leftColW + 20
+        local leftY = -10
+        
+        local help = scrollChild.CR_Sandbox_Help or scrollChild:CreateFontString(nil, "OVERLAY")
+        help:SetParent(scrollChild); help:ClearAllPoints(); help:SetPoint("TOPLEFT", leftX, leftY); help:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); help:SetWidth(leftColW); help:SetJustifyH("LEFT")
+        help:SetText("|cff00ccff[排版引擎]|r |cff00ff00[左键]|r单击选中资源条/监控进行配置；|cffffaa00[按住并拖拽]|r可改变全局堆叠排序；点击空白处返回全局设置。")
+        help:Show(); scrollChild.CR_Sandbox_Help = help
+        leftY = leftY - 35
+
+        local previewBox = scrollChild.CR_Sandbox_Box or CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
+        previewBox:SetPoint("TOPLEFT", leftX, leftY)
+        WF.UI.Factory.ApplyFlatSkin(previewBox, 0.05, 0.05, 0.05, 1, 0, 0, 0, 1); previewBox:Show(); scrollChild.CR_Sandbox_Box = previewBox
+
+        local bgClick = scrollChild.CR_Sandbox_BgClick
+        if not bgClick then
+            bgClick = CreateFrame("Button", nil, previewBox)
+            bgClick:SetAllPoints(); bgClick:SetFrameLevel(previewBox:GetFrameLevel())
+            bgClick:SetScript("OnClick", function()
+                if CR.Sandbox.selectedBar then
+                    CR.Sandbox.selectedBar = nil
+                    if WF.UI.UpdateTargetWidth then local startW = WF.MainFrame:GetWidth(); WF.UI:RefreshCurrentPanel(); WF.MainFrame:SetWidth(startW); WF.UI:UpdateTargetWidth(950, true) else WF.UI:RefreshCurrentPanel() end
+                end
+            end)
+            scrollChild.CR_Sandbox_BgClick = bgClick
         end
-        ForceSetButtonText(btnGlobal, tGlobal)
-        btnGlobal:ClearAllPoints(); btnGlobal:SetPoint("TOPLEFT", 15, y); btnGlobal:SetWidth(ColW * 1.5); btnGlobal:Show()
-        y = y - 35
 
-        if CR.ExpandState.global then
-            local flatOpts = {
-                { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用资源条 (总控全局及监控条开关)", requireReload = true },
-                { type = "dropdown", key = "texture", db = db, text = L["Global Texture"] or "全局材质", options = GetTextureOptions() },
-                { type = "dropdown", key = "font", db = db, text = L["Global Font"] or "全局字体", options = WF.UI.FontOptions },
-                { type = "dropdown", key = "spec", db = tempDB, text = L["Select Context"] or "【核心】当前编辑的专精", options = GetSpecOptions() },
-                { type = "slider", key = "width", db = specCfg, text = L["Fixed Width"] or "全局定宽 (取消吸附时生效)", min=50, max=600, step=1 },
-                { type = "slider", key = "yOffset", db = specCfg, text = L["Stack Y Offset"] or "统一行堆叠间距", min=0, max=50, step=1 },
-                { type = "toggle", key = "alignWithCD", db = db, text = L["Align With CD Manager"] or "自动吸附到冷却管理器" },
-                { type = "slider", key = "alignYOffset", db = db, text = L["Align Y Offset"] or "吸附时基础 Y 轴偏移", min = -50, max = 50, step = 1 },
-                { type = "slider", key = "widthOffset", db = db, text = L["Width Compensation"] or "吸附时宽度强行补偿", min = -10, max = 10, step = 1 },
-            }
+        local canvas = scrollChild.CR_Sandbox_Canvas or CreateFrame("Frame", nil, previewBox)
+        canvas:SetPoint("TOP", previewBox, "TOP", 0, 0)
+        scrollChild.CR_Sandbox_Canvas = canvas
+        
+        if not scrollChild.CR_DropIndicator then
+            local ind = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+            ind:SetSize(leftColW - 60, 4)
+            local tex = ind:CreateTexture(nil, "OVERLAY"); tex:SetAllPoints(); tex:SetColorTexture(0, 1, 0, 1)
+            ind.tex = tex; ind:Hide(); scrollChild.CR_DropIndicator = ind
+        else
+            scrollChild.CR_DropIndicator:SetParent(canvas); scrollChild.CR_DropIndicator:SetSize(leftColW - 60, 4)
+        end
+
+        local pool = scrollChild.CR_Sandbox_Pool or {}
+        scrollChild.CR_Sandbox_Pool = pool
+        for _, v in ipairs(pool) do v:Hide() end
+
+        for i, key in ipairs(db.sortOrder) do
+            local btn = pool[i]
+            if not btn then
+                btn = CreateFrame("Button", nil, canvas, "BackdropTemplate")
+                btn.sb = CreateFrame("StatusBar", nil, btn); btn.sb:SetAllPoints()
+                local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+                border:SetAllPoints(); border:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+                border:SetBackdropBorderColor(0,0,0,1); btn.border = border
+                btn.text = btn.sb:CreateFontString(nil, "OVERLAY")
+                btn:RegisterForClicks("LeftButtonUp"); btn:RegisterForDrag("LeftButton")
+                pool[i] = btn
+            end
+
+            btn:SetScript("OnClick", function(self)
+                if self.isDragging then return end
+                if CR.Sandbox.selectedBar == key then CR.Sandbox.selectedBar = nil else CR.Sandbox.selectedBar = key end
+                if WF.UI.UpdateTargetWidth then local startW = WF.MainFrame:GetWidth(); WF.UI:RefreshCurrentPanel(); WF.MainFrame:SetWidth(startW); local targetReq = CR.Sandbox.selectedBar and 1050 or 950; WF.UI:UpdateTargetWidth(targetReq, true) else WF.UI:RefreshCurrentPanel() end
+            end)
             
-            y = WF.UI:RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, flatOpts, function(val) 
-                if tempDB.spec ~= CR.selectedSpecForConfig then 
-                    CR.selectedSpecForConfig = tempDB.spec
-                    WF.UI:RefreshCurrentPanel() 
+            btn:SetScript("OnEnter", function(self) if not self.isDragging and CR.Sandbox.selectedBar ~= key then self.border:SetBackdropBorderColor(0.5, 0.5, 0.5, 1) end end)
+            btn:SetScript("OnLeave", function(self) if not self.isDragging and CR.Sandbox.selectedBar ~= key then self.border:SetBackdropBorderColor(0, 0, 0, 1) end end)
+            
+            btn:SetScript("OnDragStart", function(self)
+                self.isDragging = true; local currentLevel = self:GetFrameLevel() or 1; self.origFrameLevel = currentLevel; self:SetFrameLevel(math.min(65535, currentLevel + 50))
+                local _, cy = GetCursorPosition(); local uiScale = self:GetEffectiveScale(); self.cursorStartY = cy / uiScale
+                local p, rt, rp, x, y = self:GetPoint(); self.origP, self.origRT, self.origRP = p, rt, rp; self.startX, self.startY = x, y
+                self:SetScript("OnUpdate", function(s)
+                    local _, ncy = GetCursorPosition(); ncy = ncy / uiScale
+                    s:ClearAllPoints(); s:SetPoint(s.origP, s.origRT, s.origRP, s.startX, s.startY + (ncy - s.cursorStartY))
+                    local ind = scrollChild.CR_DropIndicator; local scy = select(2, s:GetCenter()); if not scy then return end
+                    local closestBtn = nil; local minDist = 9999
+                    for j = 1, #pool do
+                        local other = pool[j]
+                        if other:IsShown() and other ~= s then
+                            local oy = select(2, other:GetCenter())
+                            if oy then local dist = math.abs(scy - oy); if dist < minDist then minDist = dist; closestBtn = other end end
+                        end
+                    end
+                    if closestBtn and minDist < 40 then
+                        s.dropTarget = closestBtn; local oy = select(2, closestBtn:GetCenter()); s.dropModeDir = (scy > oy) and "before" or "after"
+                        ind:ClearAllPoints(); ind:SetParent(closestBtn:GetParent()); ind:SetFrameLevel(math.min(65535, closestBtn:GetFrameLevel() + 5))
+                        if s.dropModeDir == "before" then ind:SetPoint("BOTTOM", closestBtn, "TOP", 0, 1) else ind:SetPoint("TOP", closestBtn, "BOTTOM", 0, -1) end
+                        ind:Show()
+                    else ind:Hide(); s.dropTarget = nil end
+                end)
+            end)
+            
+            btn:SetScript("OnDragStop", function(self)
+                self.isDragging = false; self:SetScript("OnUpdate", nil); self:SetFrameLevel(math.max(1, math.min(65535, self.origFrameLevel or 1)))
+                if scrollChild.CR_DropIndicator then scrollChild.CR_DropIndicator:Hide() end
+                if self.dropTarget then
+                    local myIdx, targetIdx
+                    for idx, v in ipairs(db.sortOrder) do if v == self.key then myIdx = idx end; if v == self.dropTarget.key then targetIdx = idx end end
+                    if myIdx and targetIdx then
+                        local myItem = table.remove(db.sortOrder, myIdx); targetIdx = 0
+                        for idx, v in ipairs(db.sortOrder) do if v == self.dropTarget.key then targetIdx = idx break end end
+                        if self.dropModeDir == "after" then table.insert(db.sortOrder, targetIdx + 1, myItem) else table.insert(db.sortOrder, targetIdx > 0 and targetIdx or 1, myItem) end
+                    end
+                end
+                self:ClearAllPoints(); WF.UI:RefreshCurrentPanel(); CR:UpdateLayout()
+            end)
+        end
+
+        local function RenderSandbox()
+            local currentY = -25
+            local gapY = tonumber(specCfg.yOffset) or 2
+            local PADDING = 20 
+            
+            for i, key in ipairs(db.sortOrder) do
+                local btn = pool[i]
+                if not btn then break end
+
+                btn.key = key
+                btn:SetParent(canvas)
+                btn:ClearAllPoints(); btn:SetPoint("TOP", canvas, "TOP", 0, currentY)
+                
+                if key == "monitor" then
+                    local wmList, wmGrowth, wmSpacing = nil, "DOWN", 18
+                    if WF.WishMonitorAPI and WF.WishMonitorAPI.GetPreviewData then wmList, wmGrowth, wmSpacing = WF.WishMonitorAPI:GetPreviewData() end
+                    wmSpacing = tonumber(wmSpacing) or 18
+                    
+                    if wmList and #wmList > 0 then
+                        local topPad = 22; local totalH = topPad
+                        for j, item in ipairs(wmList) do 
+                            local ih = tonumber(item.height) or 0
+                            if ih <= 0 then ih = 14 end
+                            totalH = totalH + ih 
+                        end
+                        totalH = totalH + (#wmList - 1) * wmSpacing
+                        
+                        btn:SetSize(leftColW - 60, totalH); btn.sb:SetAlpha(0)
+                        btn.border:SetBackdropBorderColor(0,0,0,0)
+                        if btn.text then btn.text:Hide() end
+                        
+                        if not btn.groupTitle then btn.groupTitle = btn:CreateFontString(nil, "OVERLAY") end
+                        btn.groupTitle:SetFont(STANDARD_TEXT_FONT, 13, "OUTLINE")
+                        btn.groupTitle:ClearAllPoints(); btn.groupTitle:SetPoint("BOTTOM", btn, "TOP", 0, 4)
+                        btn.groupTitle:SetText(L["Custom Monitor"] or "自定义监控条")
+                        btn.groupTitle:Show()
+                        
+                        if CR.Sandbox.selectedBar == key then
+                            if not btn.selHighlight then btn.selHighlight = btn:CreateTexture(nil, "BACKGROUND"); btn.selHighlight:SetAllPoints(); btn.selHighlight:SetColorTexture(1, 0.8, 0, 0.15) end
+                            btn.selHighlight:Show()
+                        else if btn.selHighlight then btn.selHighlight:Hide() end end
+                        
+                        if not btn.mockBars then btn.mockBars = {} end
+                        for _, mb in ipairs(btn.mockBars) do mb:Hide() end
+                        if btn.mockMain then btn.mockMain:Hide() end
+                        if btn.mockTimer then btn.mockTimer:Hide() end
+                        if btn.thresholdLines then for _, tl in ipairs(btn.thresholdLines) do tl:Hide() end end
+                        
+                        local cY = -topPad
+                        if wmGrowth == "UP" then cY = -(totalH - topPad) end
+                        
+                        for j, item in ipairs(wmList) do
+                            local mb = btn.mockBars[j]
+                            if not mb then
+                                mb = CreateFrame("StatusBar", nil, btn, "BackdropTemplate")
+                                mb:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+                                mb:SetBackdropColor(0.15, 0.15, 0.15, 0.9); mb:SetBackdropBorderColor(0,0,0,1)
+                                mb.tex = mb:CreateTexture(nil, "ARTWORK"); mb.tex:SetAllPoints()
+                                mb.nameText = mb:CreateFontString(nil, "OVERLAY")
+                                mb.stackText = mb:CreateFontString(nil, "OVERLAY")
+                                mb.timerText = mb:CreateFontString(nil, "OVERLAY")
+                                btn.mockBars[j] = mb
+                            end
+                            
+                            local h = tonumber(item.height) or 0
+                            if h <= 0 then h = 14 end
+                            
+                            mb:SetSize(leftColW - 60, h); mb:ClearAllPoints(); mb:SetPoint("TOP", btn, "TOP", 0, cY)
+                            mb.tex:SetTexture(LSM:Fetch("statusbar", db.texture) or "Interface\\TargetingFrame\\UI-StatusBar")
+                            
+                            local cColor = type(item.color) == "table" and item.color or {r=0,g=0.8,b=1,a=0.9}
+                            mb.tex:SetVertexColor(tonumber(cColor.r) or 0, tonumber(cColor.g) or 0.8, tonumber(cColor.b) or 1, tonumber(cColor.a) or 0.9)
+                            
+                            local gFontPath, gFontSize = db.font or "Expressway", tonumber(db.fontSize) or 12
+                            local font = LSM:Fetch("font", gFontPath) or STANDARD_TEXT_FONT
+                            local fSize = tonumber(item.fontSize) or 0
+                            if fSize <= 0 then fSize = gFontSize end
+                            
+                            mb.nameText:Hide()
+                            
+                            mb.stackText:SetFont(font, fSize + 2, "OUTLINE"); mb.stackText:ClearAllPoints()
+                            local sAnchor = item.stackAnchor or "LEFT"
+                            if sAnchor == "LEFT" then mb.stackText:SetPoint("LEFT", mb, "LEFT", 4, 0); mb.stackText:SetJustifyH("LEFT")
+                            elseif sAnchor == "RIGHT" then mb.stackText:SetPoint("RIGHT", mb, "RIGHT", -4, 0); mb.stackText:SetJustifyH("RIGHT")
+                            else mb.stackText:SetPoint("CENTER", mb, "CENTER", 0, 0); mb.stackText:SetJustifyH("CENTER") end
+                            if item.showStack then mb.stackText:SetText("3"); mb.stackText:Show() else mb.stackText:Hide() end
+                            
+                            mb.timerText:SetFont(font, fSize, "OUTLINE"); mb.timerText:ClearAllPoints()
+                            local tAnchor = item.timerAnchor or "RIGHT"
+                            if tAnchor == "LEFT" then mb.timerText:SetPoint("LEFT", mb, "LEFT", 4, 0); mb.timerText:SetJustifyH("LEFT")
+                            elseif tAnchor == "RIGHT" then mb.timerText:SetPoint("RIGHT", mb, "RIGHT", -4, 0); mb.timerText:SetJustifyH("RIGHT")
+                            else mb.timerText:SetPoint("CENTER", mb, "CENTER", 0, 0); mb.timerText:SetJustifyH("CENTER") end
+                            
+                            if item.showTimer then mb.timerText:SetText("12.5"); mb.timerText:Show() else mb.timerText:Hide() end
+                            
+                            mb:Show()
+                            if wmGrowth == "UP" then cY = cY + h + wmSpacing else cY = cY - h - wmSpacing end
+                        end
+                        
+                        btn:Show()
+                        currentY = currentY - totalH - gapY - PADDING
+                    else
+                        btn:SetSize(leftColW - 60, 30); btn.sb:SetAlpha(1)
+                        btn.sb:SetStatusBarTexture(LSM:Fetch("statusbar", db.texture) or "Interface\\TargetingFrame\\UI-StatusBar")
+                        btn.sb:SetStatusBarColor(0.2, 0.5, 0.2, 0.9)
+                        if btn.groupTitle then btn.groupTitle:Hide() end
+                        if btn.text then 
+                            btn.text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+                            btn.text:SetText(L["Custom Monitor"] or "自定义监控 (空)\n点击在右侧添加")
+                            btn.text:ClearAllPoints(); btn.text:SetPoint("CENTER", btn.sb, "CENTER", 0, 0)
+                            btn.text:Show() 
+                        end
+                        btn.border:SetBackdropBorderColor(0,0,0,1)
+                        if btn.selHighlight then btn.selHighlight:Hide() end
+                        if btn.mockBars then for _, mb in ipairs(btn.mockBars) do mb:Hide() end end
+                        if CR.Sandbox.selectedBar == key then btn.border:SetBackdropBorderColor(1, 0.8, 0, 1) end
+                        
+                        if btn.mockMain then btn.mockMain:Hide() end
+                        if btn.mockTimer then btn.mockTimer:Hide() end
+                        if btn.thresholdLines then for _, tl in ipairs(btn.thresholdLines) do tl:Hide() end end
+
+                        btn:Show()
+                        currentY = currentY - 30 - gapY - PADDING
+                    end
+                else
+                    local h = 14; local c = {r=1,g=1,b=1}; local name = ""; local isEnabled = true; local cfgObj = nil
+                    if key == "power" then h = tonumber(specCfg.power.height) or 14; c = GetSafeColor(specCfg.power, GetPowerColor(UnitPowerType("player")), false); name = L["Power Bar"] or "能量条"; isEnabled = specCfg.showPower; cfgObj = specCfg.power
+                    elseif key == "class" then h = tonumber(specCfg.class.height) or 12; local _,_,dc = GetClassResourceData(); c = GetSafeColor(specCfg.class, dc, true); name = L["Class Resource Bar"] or "主资源条"; isEnabled = specCfg.showClass; cfgObj = specCfg.class
+                    elseif key == "mana" then h = tonumber(specCfg.mana.height) or 10; c = GetSafeColor(specCfg.mana, POWER_COLORS[0], false); name = L["Extra Mana Bar"] or "额外法力条"; isEnabled = specCfg.showMana; cfgObj = specCfg.mana end
+                    
+                    btn:SetSize(leftColW - 60, h); btn.sb:SetAlpha(1)
+                    btn.sb:SetStatusBarTexture(LSM:Fetch("statusbar", db.texture) or "Interface\\TargetingFrame\\UI-StatusBar")
+                    if isEnabled then btn.sb:SetStatusBarColor(c.r, c.g, c.b, 0.9)
+                    else btn.sb:SetStatusBarColor(0.2, 0.2, 0.2, 0.8); name = name .. " |cffff0000(禁用)|r" end
+                    
+                    if btn.groupTitle then btn.groupTitle:Hide() end
+                    if btn.selHighlight then btn.selHighlight:Hide() end
+                    if btn.mockBars then for _, mb in ipairs(btn.mockBars) do mb:Hide() end end
+                    if CR.Sandbox.selectedBar == key then btn.border:SetBackdropBorderColor(1, 0.8, 0, 1) else btn.border:SetBackdropBorderColor(0, 0, 0, 1) end
+                    
+                    if not btn.mockMain then btn.mockMain = btn.sb:CreateFontString(nil, "OVERLAY") end
+                    if not btn.mockTimer then btn.mockTimer = btn.sb:CreateFontString(nil, "OVERLAY") end
+                    
+                    if isEnabled and cfgObj and key == "power" and cfgObj.thresholdLines then
+                        if not btn.thresholdLines then btn.thresholdLines = {} end
+                        local activeLines = 0
+                        for lineIdx = 1, 5 do
+                            local tLineCfg = cfgObj.thresholdLines[lineIdx]
+                            if type(tLineCfg) == "table" and tLineCfg.enable and (tonumber(tLineCfg.value) or 0) > 0 then
+                                activeLines = activeLines + 1
+                                local tLine = btn.thresholdLines[activeLines]
+                                if not tLine then tLine = btn.sb:CreateTexture(nil, "OVERLAY", nil, 7); btn.thresholdLines[activeLines] = tLine end
+                                
+                                local barWidth = leftColW - 60
+                                local lineVal = tonumber(tLineCfg.value) or 0
+                                local realMax = UnitPowerMax("player", UnitPowerType("player"))
+                                if not realMax or realMax <= 0 then realMax = 100 end
+                                local pct = lineVal / realMax
+                                if pct > 1 then pct = 1 end
+                                
+                                local posX = pct * barWidth
+                                local tColor = type(tLineCfg.color) == "table" and tLineCfg.color or {r=1,g=1,b=1,a=1}
+                                local tThick = tonumber(tLineCfg.thickness) or 2
+                                
+                                tLine:SetColorTexture(tColor.r or 1, tColor.g or 1, tColor.b or 1, tColor.a or 1)
+                                tLine:SetWidth(tThick); tLine:ClearAllPoints()
+                                tLine:SetPoint("TOPLEFT", btn.sb, "TOPLEFT", posX - (tThick/2), 0)
+                                tLine:SetPoint("BOTTOMLEFT", btn.sb, "BOTTOMLEFT", posX - (tThick/2), 0)
+                                tLine:Show()
+                            end
+                        end
+                        for idx = activeLines + 1, #(btn.thresholdLines or {}) do if btn.thresholdLines[idx] then btn.thresholdLines[idx]:Hide() end end
+                    else
+                        if btn.thresholdLines then for _, tl in ipairs(btn.thresholdLines) do tl:Hide() end end
+                    end
+                    
+                    if isEnabled and cfgObj then
+                        local gFontPath = db.font or "Expressway"
+                        local font = LSM:Fetch("font", gFontPath) or STANDARD_TEXT_FONT
+                        local fSize = tonumber(cfgObj.fontSize) or 12
+                        local fColor = type(cfgObj.color) == "table" and cfgObj.color or {r=1,g=1,b=1}
+                        local fOut = cfgObj.outline or "OUTLINE"
+                        
+                        btn.mockMain:SetFont(font, fSize, fOut)
+                        btn.mockMain:SetTextColor(fColor.r or 1, fColor.g or 1, fColor.b or 1)
+                        btn.mockMain:ClearAllPoints()
+                        local mAnchor = cfgObj.textAnchor or "CENTER"
+                        btn.mockMain:SetPoint(mAnchor, btn.sb, mAnchor, tonumber(cfgObj.xOffset) or 0, tonumber(cfgObj.yOffset) or 0)
+                        btn.mockMain:SetJustifyH(mAnchor)
+                        
+                        local textShow = true
+                        if key == "power" then textShow = specCfg.textPower elseif key == "class" then textShow = specCfg.textClass elseif key == "mana" then textShow = specCfg.textMana end
+                        
+                        if textShow ~= false and cfgObj.textFormat ~= "NONE" then
+                            if key == "class" then btn.mockMain:SetText("5") else btn.mockMain:SetText("100") end
+                            btn.mockMain:Show()
+                        else btn.mockMain:Hide() end
+                        
+                        btn.mockTimer:Hide()
+                        
+                        if btn.text then 
+                            btn.text:SetFont(STANDARD_TEXT_FONT, math.max(10, fSize - 2), "OUTLINE")
+                            btn.text:ClearAllPoints(); btn.text:SetPoint("BOTTOM", btn.sb, "TOP", 0, 4)
+                            btn.text:SetText(name); btn.text:Show()
+                        end
+                    else
+                        btn.mockMain:Hide(); btn.mockTimer:Hide()
+                        if btn.text then
+                            btn.text:ClearAllPoints(); btn.text:SetPoint("CENTER", btn.sb, "CENTER", 0, 0)
+                            btn.text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+                            btn.text:SetText(name); btn.text:Show()
+                        end
+                    end
+    
+                    btn:Show()
+                    currentY = currentY - h - gapY - PADDING
+                end
+            end
+            
+            local previewHeight = math.max(300, math.abs(currentY) + 30)
+            previewBox:SetSize(leftColW, previewHeight); canvas:SetSize(leftColW, previewHeight)
+            return previewHeight
+        end
+
+        CR.Sandbox.RenderPreview = RenderSandbox
+        local pHeight = RenderSandbox()
+        leftY = leftY - pHeight - 15
+
+        local rightY = -45
+        local function SafeLayoutChange() 
+            CR:UpdateLayout()
+            if WF.WishMonitorAPI and WF.WishMonitorAPI.TriggerUpdate then WF.WishMonitorAPI:TriggerUpdate() end 
+            RenderSandbox() 
+        end
+        
+        -- 【核心修复2】动态读取当前真实能量上限
+        local currentMaxPower = 100
+        pcall(function()
+            local rawMax = UnitPowerMax("player", UnitPowerType("player"))
+            if type(rawMax) == "number" and rawMax > 0 then currentMaxPower = rawMax end
+        end)
+        
+        if CR.Sandbox.selectedBar == "power" then
+            local lineDB = { line = CR.selectedThresholdLine or 1 }
+            local opts = { 
+                { type = "group", key = "p1", text = "|cff00ff00所选层设置|r: 能量条", childs = {
+                    { type = "toggle", key = "showPower", db = specCfg, text = L["Enable This Bar"] or "启用该模块" },
+                    { type = "slider", key = "height", db = specCfg.power, text = L["Height"] or "高度", min=2, max=50, step=1 },
+                    { type = "toggle", key = "useCustomColor", db = specCfg.power, text = L["Custom Color"] or "自定义前景色" },
+                    { type = "color", key = "customColor", db = specCfg.power, text = L["Color"] or "颜色" },
+                }},
+                { type = "group", key = "p3", text = L["Text Layout"] or "文字排版", childs = {
+                    { type = "toggle", key = "textPower", db = specCfg, text = L["Show Text"] or "启用并显示文本" },
+                    { type = "dropdown", key = "textFormat", db = specCfg.power, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
+                    { type = "dropdown", key = "textAnchor", db = specCfg.power, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
+                    { type = "slider", key = "xOffset", db = specCfg.power, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
+                    { type = "slider", key = "yOffset", db = specCfg.power, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
+                    { type = "slider", key = "fontSize", db = specCfg.power, text = L["Font Size"] or "大小", min=0, max=64, step=1 },
+                    { type = "color", key = "color", db = specCfg.power, text = L["Font Color"] or "文字颜色" },
+                }},
+                { type = "group", key = "p4", text = L["Threshold Lines"] or "多重刻度线", childs = {
+                    { type = "dropdown", key = "line", db = lineDB, text = L["Select Line"] or "选择刻度线", options = { {text="1", value=1}, {text="2", value=2}, {text="3", value=3}, {text="4", value=4}, {text="5", value=5} } },
+                    { type = "toggle", key = "enable", db = specCfg.power.thresholdLines[lineDB.line], text = L["Enable"] or "启用" },
+                    { type = "slider", key = "value", db = specCfg.power.thresholdLines[lineDB.line], text = L["Value"] or "触发数值", min=1, max=currentMaxPower, step=1 },
+                    { type = "slider", key = "thickness", db = specCfg.power.thresholdLines[lineDB.line], text = L["Thickness"] or "粗细", min=1, max=10, step=1 },
+                    { type = "color", key = "color", db = specCfg.power.thresholdLines[lineDB.line], text = L["Color"] or "颜色" },
+                }}
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, opts, function(val) 
+                if type(val) == "string" and val == "line" then CR.selectedThresholdLine = lineDB.line; WF.UI:RefreshCurrentPanel() 
+                else SafeLayoutChange(); if type(val) == "string" and (val == "showPower" or val == "enable" or val == "UI_REFRESH") then WF.UI:RefreshCurrentPanel() end end 
+            end)
+            
+        elseif CR.Sandbox.selectedBar == "class" then
+            local cDB = { tempC = specCfg.class.customColors[playerClass] or {r=1,g=1,b=1}, tempE = specCfg.class.useCustomColors[playerClass] or false }
+            local opts = {
+                { type = "group", key = "c1", text = "|cff00ff00所选层设置|r: 主资源条", childs = {
+                    { type = "toggle", key = "showClass", db = specCfg, text = L["Enable This Bar"] or "启用该模块" },
+                    { type = "slider", key = "height", db = specCfg.class, text = L["Height"] or "高度", min=2, max=50, step=1 },
+                    { type = "toggle", key = "tempE", db = cDB, text = L["Custom Color"] or "自定义前景色" },
+                    { type = "color", key = "tempC", db = cDB, text = L["Color"] or "颜色" },
+                }},
+                { type = "group", key = "c3", text = L["Text Layout"] or "文字排版", childs = {
+                    { type = "toggle", key = "textClass", db = specCfg, text = L["Show Text"] or "启用并显示文本" },
+                    { type = "dropdown", key = "textFormat", db = specCfg.class, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
+                    { type = "dropdown", key = "textAnchor", db = specCfg.class, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
+                    { type = "slider", key = "xOffset", db = specCfg.class, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
+                    { type = "slider", key = "yOffset", db = specCfg.class, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
+                    { type = "slider", key = "fontSize", db = specCfg.class, text = L["Font Size"] or "大小", min=0, max=64, step=1 },
+                    { type = "color", key = "color", db = specCfg.class, text = L["Font Color"] or "文字颜色" },
+                }}
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, opts, function(val) 
+                specCfg.class.useCustomColors[playerClass] = cDB.tempE; specCfg.class.customColors[playerClass] = cDB.tempC; 
+                SafeLayoutChange(); if type(val) == "string" and (val == "showClass" or val == "UI_REFRESH") then WF.UI:RefreshCurrentPanel() end 
+            end)
+            
+        elseif CR.Sandbox.selectedBar == "mana" then
+            local opts = {
+                { type = "group", key = "m1", text = "|cff00ff00所选层设置|r: 额外法力条", childs = {
+                    { type = "toggle", key = "showMana", db = specCfg, text = L["Enable This Bar"] or "启用该模块" },
+                    { type = "slider", key = "height", db = specCfg.mana, text = L["Height"] or "高度", min=2, max=50, step=1 },
+                    { type = "toggle", key = "useCustomColor", db = specCfg.mana, text = L["Custom Color"] or "自定义前景色" },
+                    { type = "color", key = "customColor", db = specCfg.mana, text = L["Color"] or "颜色" },
+                }},
+                { type = "group", key = "m3", text = L["Text Layout"] or "文字排版", childs = {
+                    { type = "toggle", key = "textMana", db = specCfg, text = L["Show Text"] or "启用并显示文本" },
+                    { type = "dropdown", key = "textFormat", db = specCfg.mana, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
+                    { type = "dropdown", key = "textAnchor", db = specCfg.mana, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
+                    { type = "slider", key = "xOffset", db = specCfg.mana, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
+                    { type = "slider", key = "yOffset", db = specCfg.mana, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
+                    { type = "slider", key = "fontSize", db = specCfg.mana, text = L["Font Size"] or "大小", min=0, max=64, step=1 },
+                    { type = "color", key = "color", db = specCfg.mana, text = L["Font Color"] or "文字颜色" },
+                }}
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, opts, function(val) 
+                SafeLayoutChange(); if type(val) == "string" and (val == "showMana" or val == "UI_REFRESH") then WF.UI:RefreshCurrentPanel() end 
+            end)
+            
+        elseif CR.Sandbox.selectedBar == "monitor" then
+            if WF.WishMonitorAPI and WF.WishMonitorAPI.RenderOptions then
+                rightY = WF.WishMonitorAPI:RenderOptions(scrollChild, rightX, rightY, rightColW, function(action)
+                    if action == "WM_UPDATE" then if WF.WishMonitorAPI.TriggerUpdate then WF.WishMonitorAPI:TriggerUpdate() end; CR:UpdateLayout() end
+                    CR.Sandbox.RenderPreview() 
+                    if action == "UI_REFRESH" then WF.UI:RefreshCurrentPanel() end 
+                end)
+            end
+        else
+            local flatOpts = {
+                { type = "group", key = "cd_global_base", text = L["Global Settings"] or "全局通用排版设定", childs = {
+                    { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用资源条系统", requireReload = true },
+                    { type = "dropdown", key = "texture", db = db, text = L["Global Texture"] or "全局材质", options = GetTextureOptions() },
+                    { type = "dropdown", key = "font", db = db, text = L["Global Font"] or "全局字体", options = WF.UI.FontOptions },
+                    { type = "dropdown", key = "spec", db = tempDB, text = L["Select Context"] or "【核心】正在编辑的专精", options = GetSpecOptions() },
+                    { type = "slider", key = "width", db = specCfg, text = L["Fixed Width"] or "全局定宽 (取消吸附时生效)", min=50, max=600, step=1 },
+                    { type = "slider", key = "yOffset", db = specCfg, text = L["Stack Y Offset"] or "沙盒堆叠间距 (含左侧预览)", min=0, max=50, step=1 },
+                    { type = "toggle", key = "alignWithCD", db = db, text = L["Align With CD Manager"] or "自动吸附到冷却管理器" },
+                    { type = "slider", key = "alignYOffset", db = db, text = L["Align Y Offset"] or "吸附时基础 Y 轴偏移", min = -50, max = 50, step = 1 },
+                    { type = "slider", key = "widthOffset", db = db, text = L["Width Compensation"] or "吸附时宽度强行补偿", min = -10, max = 10, step = 1 },
+                }}
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, flatOpts, function(val) 
+                if type(val) == "string" and val == "spec" and tempDB.spec ~= CR.selectedSpecForConfig then 
+                    CR.selectedSpecForConfig = tempDB.spec; WF.UI:RefreshCurrentPanel() 
                 else 
-                    CR:UpdateLayout()
-                    if WF.WishMonitorAPI and WF.WishMonitorAPI.TriggerUpdate then WF.WishMonitorAPI:TriggerUpdate() end
+                    SafeLayoutChange(); if type(val) == "string" and (val == "enable" or val == "UI_REFRESH") then WF.UI:RefreshCurrentPanel() end 
                 end 
             end)
-            y = y - 10
         end
-        
-        -- ==========================================
-        -- [排版层级预览条 - 独立常驻]
-        -- ==========================================
-        local tLbl = scrollChild.CR_SortTitle or scrollChild:CreateFontString(nil, "OVERLAY")
-        scrollChild.CR_SortTitle = tLbl
-        tLbl:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE"); tLbl:SetPoint("TOPLEFT", 15, y)
-        tLbl:SetText(L["Unified Sort Title"] or "|cff00ccff[模块层级与排版预览]|r (点击预览条可快速编辑对应设置)")
-        y = y - 30
-        
-        local sortOrder = db.sortOrder
-        local itemDefs = {
-            mana = { name = L["Extra Mana Bar"] or "额外法力条", color = {r=0, g=0.5, b=1}, tab = "classResource_Mana" },
-            power = { name = L["Power Bar"] or "能量条", color = PLAYER_CLASS_COLOR, tab = "classResource_Power" },
-            class = { name = L["Class Resource Bar"] or "主资源条", color = {r=1, g=0.96, b=0.41}, tab = "classResource_Class" },
-            monitor = { name = L["Custom Monitor"] or "自定义监控 (WishMonitor)", color = {r=0.2, g=0.8, b=0.2}, tab = "classResource_Monitor" }
-        }
 
-        for i, key in ipairs(sortOrder) do
-            local def = itemDefs[key]
-            if def then
-                local row = scrollChild["CR_SortRow_"..i] or CreateFrame("Button", nil, scrollChild, "BackdropTemplate")
-                scrollChild["CR_SortRow_"..i] = row
-                row:SetSize(ColW * 1.5, 30); row:ClearAllPoints(); row:SetPoint("TOPLEFT", 15, y); row:RegisterForClicks("LeftButtonUp")
-                
-                if not row.sb then
-                    row.sb = CreateFrame("StatusBar", nil, row); row.sb:SetAllPoints()
-                    local border = CreateFrame("Frame", nil, row.sb, "BackdropTemplate")
-                    border:SetAllPoints(); border:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
-                    border:SetBackdropBorderColor(0,0,0,1); row.border = border
-                    row.text = row.sb:CreateFontString(nil, "OVERLAY"); row.text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
-                    
-                    row.btnUp = CreateFrame("Button", nil, row)
-                    row.btnUp:SetSize(24, 24); row.btnUp:SetPoint("RIGHT", row, "RIGHT", -30, 0); row.btnUp:SetFrameLevel(row.sb:GetFrameLevel() + 20)
-                    row.btnUp.Text = row.btnUp:CreateFontString(nil, "OVERLAY")
-                    row.btnUp.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.btnUp.Text:SetPoint("CENTER", 0, 0); row.btnUp.Text:SetText("▲")
-                    
-                    row.btnDown = CreateFrame("Button", nil, row)
-                    row.btnDown:SetSize(24, 24); row.btnDown:SetPoint("RIGHT", row, "RIGHT", -2, 0); row.btnDown:SetFrameLevel(row.sb:GetFrameLevel() + 20)
-                    row.btnDown.Text = row.btnDown:CreateFontString(nil, "OVERLAY")
-                    row.btnDown.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.btnDown.Text:SetPoint("CENTER", 0, 0); row.btnDown.Text:SetText("▼")
-                    
-                    row.enableBtn = CreateFrame("Button", nil, row)
-                    row.enableBtn:SetSize(60, 20); row.enableBtn:SetPoint("RIGHT", row.btnUp, "LEFT", -10, 0); row.enableBtn:SetFrameLevel(row.sb:GetFrameLevel() + 20)
-                    row.enableBtn.Text = row.enableBtn:CreateFontString(nil, "OVERLAY")
-                    row.enableBtn.Text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); row.enableBtn.Text:SetPoint("CENTER", 0, 0)
-                end
-                
-                row.sb:SetStatusBarTexture(LSM:Fetch("statusbar", db.texture) or "Interface\\TargetingFrame\\UI-StatusBar")
-                row.sb:SetStatusBarColor(def.color.r, def.color.g, def.color.b, 0.8)
-                row.text:SetText(i .. ". " .. def.name)
-                
-                row:SetScript("OnEnter", function() 
-                    row.border:SetBackdropBorderColor(1, 0.8, 0, 1)
-                    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine((L["Click to configure: "] or "点击进入详细设置: ") .. def.name, 1, 1, 1)
-                    GameTooltip:Show()
-                end)
-                row:SetScript("OnLeave", function() row.border:SetBackdropBorderColor(0, 0, 0, 1); GameTooltip:Hide() end)
-                row:SetScript("OnClick", function()
-                    if def.tab then
-                        WF.UI.CurrentNodeKey = def.tab
-                        WF.UI:RefreshCurrentPanel()
-                        if type(WF.UI.RefreshMenu) == "function" then WF.UI:RefreshMenu() end
-                        if type(WF.UI.RenderMenu) == "function" then WF.UI:RenderMenu() end
-                    end
-                end)
-                
-                if key ~= "monitor" then
-                    local state = false
-                    if key == "mana" then state = specCfg.showMana elseif key == "power" then state = specCfg.showPower elseif key == "class" then state = specCfg.showClass end
-                    row.enableBtn.Text:SetText(state and (L["Module Enabled"] or "|cff00ff00[ 已启用 ]|r") or (L["Module Disabled"] or "|cffff0000[ 已禁用 ]|r"))
-                    row.enableBtn:SetScript("OnClick", function()
-                        if key == "mana" then specCfg.showMana = not specCfg.showMana elseif key == "power" then specCfg.showPower = not specCfg.showPower elseif key == "class" then specCfg.showClass = not specCfg.showClass end
-                        WF.UI:RefreshCurrentPanel(); CR:UpdateLayout()
-                    end)
-                    row.enableBtn:Show(); row.text:SetPoint("LEFT", row, "LEFT", 10, 0)
-                else
-                    row.enableBtn:Hide(); row.text:SetPoint("LEFT", row, "LEFT", 10, 0)
-                end
-                
-                row.btnUp:SetScript("OnClick", function()
-                    if i > 1 then local temp = db.sortOrder[i-1]; db.sortOrder[i-1] = db.sortOrder[i]; db.sortOrder[i] = temp; WF.UI:RefreshCurrentPanel(); CR:UpdateLayout() end
-                end)
-                row.btnUp:SetEnabled(i > 1); row.btnUp:SetAlpha(i > 1 and 1 or 0.3)
-                
-                row.btnDown:SetScript("OnClick", function()
-                    if i < #sortOrder then local temp = db.sortOrder[i+1]; db.sortOrder[i+1] = db.sortOrder[i]; db.sortOrder[i] = temp; WF.UI:RefreshCurrentPanel(); CR:UpdateLayout() end
-                end)
-                row.btnDown:SetEnabled(i < #sortOrder); row.btnDown:SetAlpha(i < #sortOrder and 1 or 0.3)
-                
-                row:Show(); y = y - 35
-            end
-        end
-        for i = #sortOrder + 1, 10 do if scrollChild["CR_SortRow_"..i] then scrollChild["CR_SortRow_"..i]:Hide() end end
-        
-        return y
-    end)
-
-    WF.UI:RegisterPanel("classResource_Power", function(scrollChild, ColW)
-        local specId = CR.selectedSpecForConfig or GetCurrentContextID()
-        local db = GetCurrentSpecConfig(specId)
-        local lineDB = { line = CR.selectedThresholdLine or 1 }
-        local opts = { 
-            { type = "group", key = "p2", text = L["Visuals"] or "视觉选项", childs = {
-                { type = "slider", key = "height", db = db.power, text = L["Height"] or "高度", min=2, max=50, step=1 },
-                { type = "toggle", key = "useCustomColor", db = db.power, text = L["Custom Color"] or "自定义前景色" },
-                { type = "color", key = "customColor", db = db.power, text = L["Color"] or "颜色" },
-            }},
-            { type = "group", key = "p3", text = L["Text Layout"] or "文字排版", childs = {
-                { type = "toggle", key = "textPower", db = db, text = L["Show Text"] or "启用并显示该层文本" },
-                { type = "dropdown", key = "textFormat", db = db.power, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
-                { type = "dropdown", key = "textAnchor", db = db.power, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
-                { type = "slider", key = "xOffset", db = db.power, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
-                { type = "slider", key = "yOffset", db = db.power, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
-                { type = "slider", key = "fontSize", db = db.power, text = L["Font Size"] or "大小", min=8, max=40, step=1 },
-                { type = "color", key = "color", db = db.power, text = L["Font Color"] or "文字颜色" },
-            }},
-            { type = "group", key = "p4", text = L["Threshold Lines"] or "多重刻度线", childs = {
-                { type = "dropdown", key = "line", db = lineDB, text = L["Select Line"] or "选择刻度线", options = { {text="1", value=1}, {text="2", value=2}, {text="3", value=3}, {text="4", value=4}, {text="5", value=5} } },
-                { type = "toggle", key = "enable", db = db.power.thresholdLines[lineDB.line], text = L["Enable"] or "启用" },
-                { type = "slider", key = "value", db = db.power.thresholdLines[lineDB.line], text = L["Value"] or "触发数值", min=1, max=1000, step=1 },
-                { type = "slider", key = "thickness", db = db.power.thresholdLines[lineDB.line], text = L["Thickness"] or "粗细", min=1, max=10, step=1 },
-                { type = "color", key = "color", db = db.power.thresholdLines[lineDB.line], text = L["Color"] or "颜色" },
-            }}
-        }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() if lineDB.line ~= CR.selectedThresholdLine then CR.selectedThresholdLine = lineDB.line; WF.UI:RefreshCurrentPanel() else CR:UpdateLayout() end end)
-    end)
-
-    WF.UI:RegisterPanel("classResource_Class", function(scrollChild, ColW)
-        local specId = CR.selectedSpecForConfig or GetCurrentContextID()
-        local db = GetCurrentSpecConfig(specId)
-        local cDB = { tempC = db.class.customColors[playerClass] or {r=1,g=1,b=1}, tempE = db.class.useCustomColors[playerClass] or false }
-        local opts = {
-            { type = "group", key = "c2", text = L["Visuals"] or "视觉选项", childs = {
-                { type = "slider", key = "height", db = db.class, text = L["Height"] or "高度", min=2, max=50, step=1 },
-                { type = "toggle", key = "tempE", db = cDB, text = L["Custom Color"] or "自定义前景色" },
-                { type = "color", key = "tempC", db = cDB, text = L["Color"] or "颜色" },
-            }},
-            { type = "group", key = "c3", text = L["Text Layout"] or "文字排版", childs = {
-                { type = "toggle", key = "textClass", db = db, text = L["Show Text"] or "启用并显示该层文本" },
-                { type = "dropdown", key = "textFormat", db = db.class, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
-                { type = "dropdown", key = "textAnchor", db = db.class, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
-                { type = "slider", key = "xOffset", db = db.class, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
-                { type = "slider", key = "yOffset", db = db.class, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
-                { type = "slider", key = "fontSize", db = db.class, text = L["Font Size"] or "大小", min=8, max=40, step=1 },
-                { type = "color", key = "color", db = db.class, text = L["Font Color"] or "文字颜色" },
-            }}
-        }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() db.class.useCustomColors[playerClass] = cDB.tempE; db.class.customColors[playerClass] = cDB.tempC; CR:UpdateLayout() end)
-    end)
-
-    WF.UI:RegisterPanel("classResource_Mana", function(scrollChild, ColW)
-        local specId = CR.selectedSpecForConfig or GetCurrentContextID()
-        local db = GetCurrentSpecConfig(specId)
-        local opts = {
-            { type = "group", key = "m2", text = L["Visuals"] or "视觉选项", childs = {
-                { type = "slider", key = "height", db = db.mana, text = L["Height"] or "高度", min=2, max=50, step=1 },
-                { type = "toggle", key = "useCustomColor", db = db.mana, text = L["Custom Color"] or "自定义前景色" },
-                { type = "color", key = "customColor", db = db.mana, text = L["Color"] or "颜色" },
-            }},
-            { type = "group", key = "m3", text = L["Text Layout"] or "文字排版", childs = {
-                { type = "toggle", key = "textMana", db = db, text = L["Show Text"] or "启用并显示该层文本" },
-                { type = "dropdown", key = "textFormat", db = db.mana, text = L["Format"] or "格式", options = { {text="AUTO", value="AUTO"}, {text="PERCENT", value="PERCENT"}, {text="ABSOLUTE", value="ABSOLUTE"}, {text="BOTH", value="BOTH"}, {text="NONE", value="NONE"} } },
-                { type = "dropdown", key = "textAnchor", db = db.mana, text = L["Anchor"] or "对齐", options = WF.UI.AnchorOptions },
-                { type = "slider", key = "xOffset", db = db.mana, text = L["X Offset"] or "X 偏移", min=-200, max=200, step=1 },
-                { type = "slider", key = "yOffset", db = db.mana, text = L["Y Offset"] or "Y 偏移", min=-100, max=100, step=1 },
-                { type = "slider", key = "fontSize", db = db.mana, text = L["Font Size"] or "大小", min=8, max=40, step=1 },
-                { type = "color", key = "color", db = db.mana, text = L["Font Color"] or "文字颜色" },
-            }}
-        }
-        return WF.UI:RenderOptionsGroup(scrollChild, 15, -10, ColW * 1.5, opts, function() CR:UpdateLayout() end)
+        return math.min(leftY, rightY), targetWidth
     end)
 end

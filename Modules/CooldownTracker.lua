@@ -20,7 +20,7 @@ local DefaultConfig = {
 Tracker.desatSpellSet = {}
 Tracker.resourceSpellSet = {}
 
--- 使用弱引用表来缓存 Frame 状态，防止内存泄漏和无限递归更新
+-- 使用弱引用表来缓存 Frame 状态
 local Wish_FrameData = setmetatable({}, { __mode = "k" })
 local function GetFrameData(frame)
     local data = Wish_FrameData[frame]
@@ -38,7 +38,6 @@ local function SafeKillRedBorder(frame)
     local function killTex(tex)
         if tex and not tex._wishKilled then
             tex._wishKilled = true
-            -- 安全挂钩，拦截所有试图显示或设置透明度的行为
             hooksecurefunc(tex, "SetAlpha", function(s, a) 
                 if a > 0 and not s._wLock then 
                     s._wLock = true; s:SetAlpha(0); s._wLock = false 
@@ -60,9 +59,7 @@ end
 
 local function ApplyWishVisuals(frame)
     if not frame or not frame.Icon then return end
-
     local data = GetFrameData(frame)
-    -- 防止由于修改透明度或颜色触发的无限循环钩子
     if data.isUpdating then return end 
 
     SafeKillRedBorder(frame)
@@ -90,12 +87,10 @@ local function ApplyWishVisuals(frame)
     data.wishModified = true
     local isActive = true
     
-    -- 1. 目标 DoT 缺失判定 (Desat)
     if inDesat then
         local swipe = frame.cooldownSwipeColor
         if swipe and type(swipe) == "table" and swipe.GetRGBA then
             local ok, r = pcall(swipe.GetRGBA, swipe)
-            -- 如果 r 颜色通道为 0 (或者某些特定系统下)，判定为无效
             if ok and r and not (type(issecretvalue) == "function" and issecretvalue(r)) then 
                 isActive = (r ~= 0) 
             else 
@@ -106,13 +101,11 @@ local function ApplyWishVisuals(frame)
         end
     end
 
-    -- 2. 资源不足判定 (Resource)
     if isActive and inRes then
         local _, notEnoughPower = C_Spell.IsSpellUsable(spellID)
         if notEnoughPower then isActive = false end
     end
 
-    -- 应用最终视觉效果
     data.isUpdating = true 
     if not isActive then
         if frame.Cooldown then frame.Cooldown:SetDrawSwipe(false) end
@@ -147,9 +140,6 @@ local function HookFrame(frame)
     triggerUpdate()
 end
 
--- =========================================
--- [全局遍历与事件注册]
--- =========================================
 function Tracker:RefreshAll()
     if not WF.db.cooldownTracker.enable then return end
     
@@ -165,34 +155,28 @@ function Tracker:RefreshAll()
 end
 
 local function InitCooldownTracker()
-    -- 1. 初始化数据库与默认值
     if not WF.db.cooldownTracker then WF.db.cooldownTracker = {} end
     local db = WF.db.cooldownTracker
     for k, v in pairs(DefaultConfig) do
         if db[k] == nil then db[k] = v end
     end
 
-    if not db.enable then return end
-
-    -- 2. 首次加载预设法术 ID (痛楚、吸血鬼之触、星涌术等示例)
     if db.isFirstInit then
-        db.desatSpells[980] = true      -- 痛苦术 痛楚
-        db.desatSpells[589] = true      -- 暗牧 吸血鬼之触
-        db.resourceSpells[124467] = true -- 示例资源追踪法术
+        db.desatSpells["980"] = true      
+        db.desatSpells["589"] = true      
+        db.resourceSpells["124467"] = true 
         db.isFirstInit = false
     end
 
-    -- 3. 建立内存高速缓存集 (Set)
     wipe(Tracker.desatSpellSet)
     wipe(Tracker.resourceSpellSet)
-    if db.desatSpells then 
-        for id in pairs(db.desatSpells) do Tracker.desatSpellSet[id] = true end 
-    end
-    if db.resourceSpells then 
-        for id in pairs(db.resourceSpells) do Tracker.resourceSpellSet[id] = true end 
-    end
+    
+    -- [修复]：严格判断 v 的布尔值，忽略 false 的记录
+    if db.desatSpells then for id, v in pairs(db.desatSpells) do if v then Tracker.desatSpellSet[tonumber(id)] = true end end end
+    if db.resourceSpells then for id, v in pairs(db.resourceSpells) do if v then Tracker.resourceSpellSet[tonumber(id)] = true end end end
 
-    -- 4. 注册更新事件 (利用 C_Timer.After 做高频事件节流)
+    if not db.enable then return end
+
     Tracker:RegisterEvent("PLAYER_TARGET_CHANGED")
     Tracker:RegisterEvent("UNIT_POWER_UPDATE")
     
@@ -211,12 +195,7 @@ local function InitCooldownTracker()
         end
     end)
 
-    -- 初始执行一次
-    -- 延迟 1 秒执行以确保暴雪 UI 已经生成了技能图标
-    C_Timer.After(1, function()
-        Tracker:RefreshAll()
-    end)
+    C_Timer.After(1, function() Tracker:RefreshAll() end)
 end
 
--- 注册到 WishFlex 核心引擎
-WF:RegisterModule("cooldownTracker", L["Cooldown Tracker"] or "技能可用性变灰", InitCooldownTracker)
+WF:RegisterModule("cooldownTracker", L["Icon Desaturation"] or "自定义图标 (褪色)", InitCooldownTracker)

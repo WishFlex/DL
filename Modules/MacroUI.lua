@@ -1,107 +1,62 @@
-local ElvUI = _G.ElvUI
-local E, L, V, P, G = unpack(ElvUI)
-local WUI = E:GetModule('WishFlex')
-local MR = WUI:NewModule('macroui', 'AceEvent-3.0', 'AceHook-3.0')
-local S = E:GetModule('Skins')
-local LCG = E.Libs.CustomGlow
+local AddonName, ns = ...
+local WF = _G.WishFlex or ns.WF
+local L = ns.L or {}
+local LCG = LibStub("LibCustomGlow-1.0", true)
 
-P["WishFlex"] = P["WishFlex"] or { modules = {} }
-P["WishFlex"].modules.macroui = true
-P["WishFlex"].macroui_width = 680
-P["WishFlex"].macroui_height = 750
-P["WishFlex"].macroui_glow = "pixel" 
+local MFE = CreateFrame("Frame")
+WF.MacroUIAPI = MFE
 
-local addonName = "MacroFrameEnhancer"
-local addon = CreateFrame("Frame")
-addon.knownMacros = {}
-addon.newMacros = {}
+MFE.knownMacros = {}
+MFE.newMacros = {}
 
-local function InjectOptions()
-    WUI.OptionsArgs = WUI.OptionsArgs or {}
-    WUI.OptionsArgs.widgets = WUI.OptionsArgs.widgets or { order = 21, type = "group", name = "|cff00e5cc小工具|r", childGroups = "tab", args = {} }
-    
-    WUI.OptionsArgs.widgets.args.general = WUI.OptionsArgs.widgets.args.general or { order = 1, type = "group", name = "宏界面", args = {} }
-    WUI.OptionsArgs.widgets.args.general.args.macroGroup = {
-        order = 2,
-        type = "group",
-        name = "宏命令设置",
-        guiInline = true,
-        disabled = function() return not E.db.WishFlex.modules.macroui end,
-        args = {
-            macroui_toggle = {
-                order = 1, 
-                type = "toggle", 
-                name = "开启增强", 
-                disabled = false,
-                get = function() return E.db.WishFlex.modules.macroui end, 
-                set = function(_, v) E.db.WishFlex.modules.macroui = v; E:StaticPopup_Show("CONFIG_RL") end 
-            },
-            macroui_width = {
-                order = 2,
-                type = "range",
-                name = "界面宽度",
-                min = 600, max = 1200, step = 10, 
-                get = function() return E.db.WishFlex.macroui_width end,
-                set = function(_, v) E.db.WishFlex.macroui_width = v; addon:UpdateLayout() end
-            },
-            macroui_height = {
-                order = 3,
-                type = "range",
-                name = "界面高度",
-                min = 500, max = 1200, step = 10, 
-                get = function() return E.db.WishFlex.macroui_height end,
-                set = function(_, v) E.db.WishFlex.macroui_height = v; addon:UpdateLayout() end
-            },
-            macroui_glow = {
-                order = 4,
-                type = "select",
-                name = "新建宏高亮",
-                values = {
-                    ["pixel"] = "像素发光",
-                    ["autocast"] = "闪烁发光 (AutoCast)",
-                    ["button"] = "按钮发光 (Button)"
-                },
-                get = function() return E.db.WishFlex.macroui_glow end,
-                set = function(_, v) 
-                    E.db.WishFlex.macroui_glow = v
-                    addon:UpdateMacroVisuals() 
-                end
-            }
-        }
-    }
+local DefaultConfig = {
+    enable = true,
+    width = 680,
+    height = 750,
+    glowType = "pixel",
+}
+
+local function GetDB()
+    if not WF.db.macroUI then WF.db.macroUI = {} end
+    for k, v in pairs(DefaultConfig) do
+        if WF.db.macroUI[k] == nil then WF.db.macroUI[k] = v end
+    end
+    return WF.db.macroUI
 end
 
-function addon:UpdateKnownMacros(checkNew)
-    local global, char = GetNumMacros()
+-- ========================================================
+-- [数据监听与核心功能]
+-- ========================================================
+function MFE:UpdateKnownMacros(checkNew)
     local currentList = {}
     
-    for i = 1, global do
+    -- 仅对通用宏 (1-120) 进行新建高亮判定
+    for i = 1, 120 do
         local name = GetMacroInfo(i)
-        if name then currentList[name] = true end
-    end
-    
-    for i = 121, 120 + char do
-        local name = GetMacroInfo(i)
-        if name then currentList[name] = true end
-    end
-
-    if checkNew then
-        for name in pairs(currentList) do
-            if not self.knownMacros[name] then
+        if name then 
+            currentList[name] = true 
+            if checkNew and not self.knownMacros[name] then
                 self.newMacros[name] = true
             end
         end
     end
     
+    -- 专用宏 (121-138) 依然扫描用于列表追踪和过滤，但不触发新建发光
+    for i = 121, 138 do
+        local name = GetMacroInfo(i)
+        if name then currentList[name] = true end
+    end
+
     self.knownMacros = currentList
 end
 
-function addon:UpdateMacroVisuals()
+function MFE:UpdateMacroVisuals()
     if not MacroFrame or not MacroFrame.MacroSelector or not MacroFrame.MacroSelector.ScrollBox then return end
     if not MacroFrame.MacroSelector.ScrollBox:GetView() then return end
     
     local searchText = self.SearchBox and self.SearchBox:GetText():lower() or ""
-    local glowType = E.db.WishFlex.macroui_glow
+    local db = GetDB()
+    local glowType = db.glowType
     
     MacroFrame.MacroSelector.ScrollBox:ForEachFrame(function(button)
         local elementData = button:GetElementData()
@@ -123,7 +78,7 @@ function addon:UpdateMacroVisuals()
             LCG.AutoCastGlow_Stop(button)
             LCG.ButtonGlow_Stop(button)
             
-            if addon.newMacros[name] then
+            if MFE.newMacros[name] then
                 if glowType == "pixel" then
                     LCG.PixelGlow_Start(button)
                 elseif glowType == "autocast" then
@@ -136,28 +91,37 @@ function addon:UpdateMacroVisuals()
     end)
 end
 
-function addon:CreateSearchBox()
+function MFE:CreateSearchBox()
     if self.SearchBox then return end
 
     local searchBox = CreateFrame("EditBox", "MacroFrameEnhancerSearchBox", MacroFrame, "SearchBoxTemplate")
     searchBox:SetAutoFocus(false)
     searchBox:SetMaxLetters(50)
     
-    if S then S:HandleEditBox(searchBox) end
-    
+    -- 【智能兼容】：如果有 ElvUI 则应用其原生皮肤风格，否则保留暴雪原生
+    if _G.ElvUI then
+        local E = _G.ElvUI[1]
+        if E then
+            local S = E:GetModule('Skins', true)
+            if S and S.HandleEditBox then
+                S:HandleEditBox(searchBox)
+            end
+        end
+    end
+
     searchBox:SetScript("OnTextChanged", function(self)
         SearchBoxTemplate_OnTextChanged(self)
-        addon:UpdateMacroVisuals()
+        MFE:UpdateMacroVisuals()
     end)
 
     self.SearchBox = searchBox
 end
 
-function addon:UpdateLayout()
+function MFE:UpdateLayout()
     if not MacroFrame then return end
-    local db = E.db.WishFlex
-    local safeWidth = math.max(600, db.macroui_width)
-    local safeHeight = math.max(500, db.macroui_height)
+    local db = GetDB()
+    local safeWidth = math.max(600, db.width)
+    local safeHeight = math.max(500, db.height)
 
     MacroFrame:SetWidth(safeWidth)
     MacroFrame:SetHeight(safeHeight)
@@ -260,16 +224,32 @@ function addon:UpdateLayout()
     end
 end
 
-function addon:InitializeUI()
+-- ========================================================
+-- [框架随意拖动支持]
+-- ========================================================
+function MFE:EnableDragging()
+    if not MacroFrame then return end
+    MacroFrame:SetMovable(true)
+    MacroFrame:SetClampedToScreen(true)
+    
+    local dragTarget = MacroFrame.TitleContainer or MacroFrame
+    dragTarget:EnableMouse(true)
+    dragTarget:RegisterForDrag("LeftButton")
+    dragTarget:SetScript("OnDragStart", function() MacroFrame:StartMoving() end)
+    dragTarget:SetScript("OnDragStop", function() MacroFrame:StopMovingOrSizing() end)
+end
+
+function MFE:InitializeUI()
     if self.initialized then return end
     self.initialized = true
 
     self:CreateSearchBox()
     self:UpdateLayout()
+    self:EnableDragging()
     self:HookScrollPosition()
 end
 
-function addon:HookScrollPosition()
+function MFE:HookScrollPosition()
     if not MacroFrame or not MacroFrame.MacroSelector then return end
     local scrollData = {}
     local isRestoring = false
@@ -288,7 +268,7 @@ function addon:HookScrollPosition()
 
     if MacroFrame.MacroSelector.ScrollBox then
         hooksecurefunc(MacroFrame.MacroSelector.ScrollBox, "Update", function()
-            addon:UpdateMacroVisuals()
+            MFE:UpdateMacroVisuals()
         end)
     end
 
@@ -299,9 +279,8 @@ function addon:HookScrollPosition()
                 scrollData.scrollPercentage = MacroFrame.MacroSelector.ScrollBox:GetScrollPercentage() 
             end
             
-            addon:UpdateKnownMacros(true)
-            addon:UpdateMacroVisuals()
-
+            MFE:UpdateKnownMacros(true)
+            MFE:UpdateMacroVisuals()
         elseif event == "ADDON_LOADED" then
             local loadedName = ...
             if loadedName == "Blizzard_MacroUI" then 
@@ -312,10 +291,10 @@ function addon:HookScrollPosition()
     end)
 
     MacroFrame:HookScript("OnShow", function()
-        addon:UpdateLayout()
-        addon:UpdateKnownMacros(false)
-        addon.newMacros = {}
-        if addon.SearchBox then addon.SearchBox:SetText("") end
+        MFE:UpdateLayout()
+        MFE:UpdateKnownMacros(false)
+        MFE.newMacros = {}
+        if MFE.SearchBox then MFE.SearchBox:SetText("") end
         
         if scrollData.scrollPercentage then
             C_Timer.After(0.05, function() 
@@ -327,7 +306,7 @@ function addon:HookScrollPosition()
     end)
     
     MacroFrame:HookScript("OnHide", function()
-        addon.newMacros = {}
+        MFE.newMacros = {}
         if MacroFrame and MacroFrame.MacroSelector and MacroFrame.MacroSelector.ScrollBox and MacroFrame.MacroSelector.ScrollBox:GetView() then
             MacroFrame.MacroSelector.ScrollBox:ForEachFrame(function(button)
                 if LCG then 
@@ -340,12 +319,15 @@ function addon:HookScrollPosition()
     end)
 end
 
-function addon:OnLoad()
+local function InitMacroUI()
+    local db = GetDB()
+    if not db.enable then return end
+
     if MacroFrame then 
-        self:InitializeUI() 
+        MFE:InitializeUI() 
     else
-        self:RegisterEvent("ADDON_LOADED")
-        self:SetScript("OnEvent", function(self, event, loadedName)
+        MFE:RegisterEvent("ADDON_LOADED")
+        MFE:SetScript("OnEvent", function(self, event, loadedName)
             if event == "ADDON_LOADED" and loadedName == "Blizzard_MacroUI" then 
                 self:InitializeUI()
                 self:UnregisterEvent("ADDON_LOADED") 
@@ -354,8 +336,38 @@ function addon:OnLoad()
     end
 end
 
-function MR:OnEnable()
-    InjectOptions()
-    if not E.db.WishFlex.modules.macroui then return end
-    addon:OnLoad()
+WF:RegisterModule("macroUI", L["Macro Enhancement"] or "宏界面增强", InitMacroUI)
+
+-- =========================================================================
+-- [面板注册系统]
+-- =========================================================================
+if WF.UI then
+    WF.UI:RegisterMenu({ id = "UTILITIES", name = L["Utilities"] or "小工具", type = "root", key = "WF_UTILITIES", icon = "Interface\\AddOns\\WishFlex\\Media\\Icons\\menu.tga", order = 80 })
+    WF.UI:RegisterMenu({ id = "MacroUI", parent = "UTILITIES", name = L["Macro Enhancement"] or "宏界面增强", key = "utilities_MacroUI", order = 1 })
+
+    WF.UI:RegisterPanel("utilities_MacroUI", function(scrollChild, ColW)
+        local db = GetDB()
+        local y = -10
+
+        local opts = {
+            { type = "group", key = "macro_base", text = L["Macro Settings"] or "宏界面设置", childs = {
+                { type = "toggle", key = "enable", db = db, text = L["Enable Module"] or "启用 宏界面增强", requireReload = true },
+                { type = "slider", key = "width", db = db, min = 600, max = 1200, step = 10, text = L["Macro Frame Width"] or "界面宽度" },
+                { type = "slider", key = "height", db = db, min = 500, max = 1200, step = 10, text = L["Macro Frame Height"] or "界面高度" },
+                { type = "dropdown", key = "glowType", db = db, text = L["New Macro Glow"] or "新建宏高亮样式", options = {
+                    { text = L["Pixel Glow"] or "像素边框 (Pixel)", value = "pixel" },
+                    { text = L["Autocast Glow"] or "闪烁发光 (AutoCast)", value = "autocast" },
+                    { text = L["Button Glow"] or "默认高亮 (Button)", value = "button" },
+                }},
+            }}
+        }
+
+        local function HandleMacroChange(val)
+            if MFE.UpdateLayout then MFE:UpdateLayout() end
+            if MFE.UpdateMacroVisuals then MFE:UpdateMacroVisuals() end
+            if val == "UI_REFRESH" then WF.UI:RefreshCurrentPanel() end
+        end
+
+        return WF.UI:RenderOptionsGroup(scrollChild, 15, y, ColW * 1.5, opts, HandleMacroChange)
+    end)
 end
