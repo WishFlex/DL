@@ -42,12 +42,10 @@ local function PixelSnap(value)
     return math.floor(value / onePixel + 0.5) * onePixel
 end
 
--- 【终极修复：手绘物理 1 像素完美黑边与半透明底衬】
 local function ApplyElvUISkin(targetObj, parentFrame)
     if not targetObj then return nil end
     if not targetObj.wishBd then
         local bd = CreateFrame("Frame", nil, parentFrame)
-        
         local parentLvl = (parentFrame and parentFrame.GetFrameLevel and parentFrame:GetFrameLevel()) or 1
         if targetObj.GetFrameLevel then
             bd:SetFrameLevel(math.max(0, targetObj:GetFrameLevel() - 1))
@@ -55,7 +53,6 @@ local function ApplyElvUISkin(targetObj, parentFrame)
             bd:SetFrameLevel(math.max(0, parentLvl))
         end
         
-        -- ELVUI 半透明暗色背景
         local bg = bd:CreateTexture(nil, "BACKGROUND", nil, -1)
         bg:SetAllPoints()
         bg:SetColorTexture(0.05, 0.05, 0.05, 0.6) 
@@ -308,7 +305,6 @@ function CDMod:ApplyText(frame, category, rowIndex)
     FormatText(stackText, true, cdSize, cdColor, cdPos, cdX, cdY, stackSize, stackColor, stackPos, stackX, stackY, fontPath, outline, targetRefStack, targetRefCD)
 end
 
--- 【核心渲染升级：统一的完美对齐与边框注入】
 local function ApplyIconAlignment(f, w, h, isSandbox)
     local iconTex, iconParent
     if isSandbox then
@@ -585,9 +581,10 @@ if WF.UI then
     CDMod.Sandbox = CDMod.Sandbox or {
         selectedRow = nil,
         selectedSpellForTracker = nil,
+        selectedTextMode = nil,
+        selectedGlowMode = nil,
         scannedEssential = {}, scannedUtility = {}, scannedBuffIcon = {}, scannedBuffBar = {},
-        RenderedLists = {},
-        GlowPreviewBtns = {} 
+        RenderedLists = {}
     }
 
     local function GetSpecOptions()
@@ -599,14 +596,45 @@ if WF.UI then
     end
 
     function CDMod:UpdateSandboxGlows()
-        if WF.GlowAPI and WF.db.glow and WF.db.glow.enable then
-            if WF.UI.MainScrollChild and WF.UI.MainScrollChild.SandboxIconsPool then
-                for _, btn in ipairs(WF.UI.MainScrollChild.SandboxIconsPool) do
-                    WF.GlowAPI:Hide(btn.tex.wishBd or btn)
-                end
+        local scrollChild = WF.UI and WF.UI.MainScrollChild
+        if not scrollChild then return end
+
+        if scrollChild.SandboxIconsPool then
+            for _, btn in ipairs(scrollChild.SandboxIconsPool) do
+                if WF.GlowAPI then WF.GlowAPI:Hide(btn.tex.wishBd or btn) end
+                local LibGlow = LibStub("LibCustomGlow-1.0", true)
+                if LibGlow then LibGlow.PixelGlow_Stop(btn); LibGlow.AutoCastGlow_Stop(btn); LibGlow.ButtonGlow_Stop(btn); LibGlow.ProcGlow_Stop(btn) end
             end
-            for _, btn in ipairs(CDMod.Sandbox.GlowPreviewBtns or {}) do
-                WF.GlowAPI:Show(btn)
+        end
+
+        local anchor = scrollChild.Sandbox_GlowAnchor
+        if not anchor then return end
+        
+        local LibGlow = LibStub("LibCustomGlow-1.0", true)
+        
+        if anchor.btnNative then
+            if WF.GlowAPI and WF.db.glow and WF.db.glow.enable then
+                WF.GlowAPI:Show(anchor.btnNative)
+            elseif LibGlow then
+                LibGlow.PixelGlow_Stop(anchor.btnNative); LibGlow.AutoCastGlow_Stop(anchor.btnNative); LibGlow.ButtonGlow_Stop(anchor.btnNative); LibGlow.ProcGlow_Stop(anchor.btnNative)
+            end
+        end
+        
+        if anchor.btnAura then
+            if LibGlow then LibGlow.PixelGlow_Stop(anchor.btnAura); LibGlow.AutoCastGlow_Stop(anchor.btnAura); LibGlow.ButtonGlow_Stop(anchor.btnAura); LibGlow.ProcGlow_Stop(anchor.btnAura) end
+            if WF.db.auraGlow and WF.db.auraGlow.enable and LibGlow then
+                local agDB = WF.db.auraGlow
+                local c = agDB.glowColor or {r=1,g=1,b=1,a=1}
+                if not agDB.glowUseCustomColor then c = {r=1, g=0.82, b=0, a=1} end
+                if agDB.glowType == "pixel" then
+                    LibGlow.PixelGlow_Start(anchor.btnAura, {c.r, c.g, c.b, c.a}, agDB.glowPixelLines, agDB.glowPixelFrequency, agDB.glowPixelLength, agDB.glowPixelThickness, agDB.glowPixelXOffset, agDB.glowPixelYOffset)
+                elseif agDB.glowType == "autocast" then
+                    LibGlow.AutoCastGlow_Start(anchor.btnAura, {c.r, c.g, c.b, c.a}, agDB.glowAutocastParticles, agDB.glowAutocastFrequency, agDB.glowAutocastScale, agDB.glowAutocastXOffset, agDB.glowAutocastYOffset)
+                elseif agDB.glowType == "button" then
+                    LibGlow.ButtonGlow_Start(anchor.btnAura, {c.r, c.g, c.b, c.a}, agDB.glowButtonFrequency)
+                elseif agDB.glowType == "proc" then
+                    LibGlow.ProcGlow_Start(anchor.btnAura, {c.r, c.g, c.b, c.a}, agDB.glowProcDuration)
+                end
             end
         end
     end
@@ -675,6 +703,48 @@ if WF.UI then
         if val == "UI_REFRESH" or type(val) == "string" then WF.UI:RefreshCurrentPanel() end
     end
 
+    local function SetupTextHitButton(btn, fontString, textType, rowID, catName)
+        local hitBtn = fontString._hitBtn
+        if not hitBtn then
+            hitBtn = CreateFrame("Button", nil, btn)
+            hitBtn:SetFrameLevel(btn:GetFrameLevel() + 10)
+            hitBtn.textObj = fontString
+            hitBtn:SetScript("OnEnter", function(self)
+                self.textObj:SetAlpha(0.5)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(textType == "CD" and "冷却文本设置" or "层数文本设置")
+                GameTooltip:AddLine("|cff00ff00[左键]|r 编辑该组的" .. (textType == "CD" and "倒计时" or "层数") .. "文本", 1,1,1)
+                GameTooltip:Show()
+            end)
+            hitBtn:SetScript("OnLeave", function(self)
+                self.textObj:SetAlpha(1)
+                GameTooltip:Hide()
+            end)
+            hitBtn:SetScript("OnClick", function(self)
+                CDMod.Sandbox.selectedRow = nil
+                CDMod.Sandbox.selectedSpellForTracker = nil
+                CDMod.Sandbox.selectedGlowMode = nil
+                CDMod.Sandbox.selectedTextMode = { row = rowID, type = textType, cat = catName }
+                if WF.UI.UpdateTargetWidth then
+                    local startW = WF.MainFrame:GetWidth()
+                    WF.UI:RefreshCurrentPanel()
+                    WF.MainFrame:SetWidth(startW)
+                    WF.UI:UpdateTargetWidth(1050, true)
+                else
+                    WF.UI:RefreshCurrentPanel()
+                end
+            end)
+            fontString._hitBtn = hitBtn
+        end
+        hitBtn:ClearAllPoints()
+        hitBtn:SetAllPoints(fontString)
+        if fontString:GetStringWidth() < 10 then
+            hitBtn:SetSize(20, 20)
+            hitBtn:SetPoint("CENTER", fontString, "CENTER")
+        end
+        hitBtn:Show()
+    end
+
     local function ApplyMockText(btn, dbRef, catCfg, isRow2, isBar)
         local fontPath = (LSM and LSM:Fetch('font', dbRef.countFont)) or STANDARD_TEXT_FONT
         local outline = dbRef.countFontOutline or "OUTLINE"
@@ -715,6 +785,9 @@ if WF.UI then
         btn.mockStack:SetFont(fontPath, stackSize or 14, outline)
         btn.mockStack:SetTextColor((stackColor and stackColor.r) or 1, (stackColor and stackColor.g) or 1, (stackColor and stackColor.b) or 1)
         btn.mockStack:ClearAllPoints(); btn.mockStack:SetPoint(stackPos or "BOTTOMRIGHT", targetStack, stackPos or "BOTTOMRIGHT", stackX or 0, stackY or 0); btn.mockStack:SetText("3")
+
+        SetupTextHitButton(btn, btn.mockCd, "CD", btn.rowID, btn.catName)
+        SetupTextHitButton(btn, btn.mockStack, "STACK", btn.rowID, btn.catName)
     end
 
     function CDMod:DrawSandboxToUI(forcedWidth)
@@ -742,9 +815,6 @@ if WF.UI then
         
         local poolIdx = 1
         local currentMaxWidth = 0 
-        
-        if not CDMod.Sandbox.GlowPreviewBtns then CDMod.Sandbox.GlowPreviewBtns = {} end
-        wipe(CDMod.Sandbox.GlowPreviewBtns)
 
         local function GetSortedList(catData, mockData)
             local source = (#catData > 0) and catData or mockData
@@ -852,8 +922,6 @@ if WF.UI then
                 if btn.barTex then SetBdColor(btn.barTex.wishBd, bColor) end
                 btn:SetBackdropBorderColor(0,0,0,0) 
                 
-                if i == 1 then table.insert(CDMod.Sandbox.GlowPreviewBtns, btn.tex.wishBd or btn) end
-                
                 btn:SetScript("OnClick", function(self, button)
                     if self.isDragging then return end
                     if button == "RightButton" then
@@ -865,6 +933,8 @@ if WF.UI then
                         else CDMod.Sandbox.selectedRow = self.rowID end
                         CDMod.Sandbox.selectedSpellForTracker = nil
                     end
+                    CDMod.Sandbox.selectedTextMode = nil
+                    CDMod.Sandbox.selectedGlowMode = nil
                     
                     if WF.UI.UpdateTargetWidth then
                         local startW = WF.MainFrame:GetWidth(); WF.UI:RefreshCurrentPanel(); WF.MainFrame:SetWidth(startW) 
@@ -992,7 +1062,6 @@ if WF.UI then
                 end)
                 
                 ApplyMockText(btn, db, catCfg, isRow2, catName == "BuffBar")
-                if WF.AuraGlowAPI and WF.AuraGlowAPI.ApplyPreview then WF.AuraGlowAPI:ApplyPreview(btn.tex.wishBd or btn, btn.spellID, false) end
                 
                 btn:Show(); poolIdx = poolIdx + 1
             end
@@ -1007,90 +1076,73 @@ if WF.UI then
         cH = RenderGroup(eR2, db.Essential, "Essential", "Row2", currentY, true); currentY = currentY - cH - 12
         cH = RenderGroup(uList, db.Utility, "Utility", "Utility", currentY, false); currentY = currentY - cH - 12
 
-        if WF.db.auraGlow and WF.AuraGlowAPI then
-            local agDB = WF.db.auraGlow
-            local activeInds = {}
-            local currentSpecID = 0
-            pcall(function() currentSpecID = GetSpecializationInfo(GetSpecialization()) or 0 end)
+        local glowAnchor = scrollChild.Sandbox_GlowAnchor
+        if not glowAnchor then
+            glowAnchor = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+            WF.UI.Factory.ApplyFlatSkin(glowAnchor, 0.1, 0.1, 0.1, 0.3, 0.2, 0.2, 0.2, 0.6)
             
-            for sIDStr, cfg in pairs(agDB.spells) do
-                if cfg.iconEnable and (not cfg.class or cfg.class == "ALL" or cfg.class == playerClass) then
-                    local sSpec = tonumber(cfg.spec) or 0
-                    if sSpec == 0 or sSpec == currentSpecID then table.insert(activeInds, tonumber(sIDStr)) end
-                end
-            end
+            local tTitle = glowAnchor:CreateFontString(nil, "OVERLAY")
+            tTitle:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+            tTitle:SetPoint("BOTTOM", glowAnchor, "TOP", 0, 4)
+            tTitle:SetText(L["Glow Previews"] or "全局发光引擎预览 (点击设置)")
+            glowAnchor.title = tTitle
+            scrollChild.Sandbox_GlowAnchor = glowAnchor
             
-            local previewInds = {}
-            local maxPreviewCols = 6
-            for i = 1, math.min(#activeInds, maxPreviewCols) do table.insert(previewInds, activeInds[i]) end
+            local btn1 = CreateFrame("Button", nil, glowAnchor, "BackdropTemplate")
+            btn1:SetSize(45, 45); btn1:SetPoint("LEFT", glowAnchor, "LEFT", 15, 0)
+            btn1:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+            btn1:SetBackdropBorderColor(0,0,0,1)
+            local tex1 = btn1:CreateTexture(nil, "BACKGROUND")
+            tex1:SetPoint("TOPLEFT", 1, -1); tex1:SetPoint("BOTTOMRIGHT", -1, 1); tex1:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+            tex1:SetTexture(136116) 
+            btn1.tex = tex1
+            local b1Title = btn1:CreateFontString(nil, "OVERLAY")
+            b1Title:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+            b1Title:SetPoint("TOP", btn1, "BOTTOM", 0, -5)
+            b1Title:SetText("暴雪原生高亮")
             
-            if #previewInds > 0 then
-                local indAnchor = scrollChild.Sandbox_IndAnchor
-                if not indAnchor then
-                    indAnchor = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-                    WF.UI.Factory.ApplyFlatSkin(indAnchor, 0.1, 0.1, 0.1, 0.3, 0.2, 0.2, 0.2, 0.6)
-                    indAnchor.title = indAnchor:CreateFontString(nil, "OVERLAY")
-                    indAnchor.title:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); indAnchor.title:SetPoint("BOTTOM", indAnchor, "TOP", 0, 4)
-                    indAnchor.title:SetText(L["Independent Aura Glow"] or "触发时屏幕中央弹出的独立高亮图标组 (预览受限)")
-                    scrollChild.Sandbox_IndAnchor = indAnchor
-                end
-                
-                local cfg = agDB.independent
-                local w = tonumber(cfg.size) or 45; local gap = tonumber(cfg.gap) or 2; local growth = cfg.growth or "LEFT"
-                local numIcons = #previewInds
-                local totalW = (numIcons * w) + math.max(0, (numIcons - 1) * gap)
-                local bgW, bgH = totalW + 4, w + 4
-                
-                currentY = currentY - 20
-                indAnchor:ClearAllPoints(); indAnchor:SetSize(bgW, bgH); indAnchor:SetPoint("TOP", canvas, "TOP", 0, currentY); indAnchor:Show()
-                
-                if not scrollChild.SandboxIndIconsPool then scrollChild.SandboxIndIconsPool = {} end
-                for _, b in ipairs(scrollChild.SandboxIndIconsPool) do b:Hide() end
-                
-                local startX = -(totalW / 2) + (w / 2)
-                for i, sID in ipairs(previewInds) do
-                    local btn = scrollChild.SandboxIndIconsPool[i]
-                    if not btn then
-                        btn = CreateFrame("Button", nil, canvas, "BackdropTemplate")
-                        btn:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
-                        local tex = btn:CreateTexture(nil, "BACKGROUND")
-                        tex:SetPoint("TOPLEFT", 1, -1); tex:SetPoint("BOTTOMRIGHT", -1, 1); tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                        btn.tex = tex; scrollChild.SandboxIndIconsPool[i] = btn
-                    end
-                    
-                    btn:SetParent(indAnchor); btn:SetSize(w, w); btn:ClearAllPoints()
-                    
-                    if growth == "CENTER_HORIZONTAL" then btn:SetPoint("CENTER", indAnchor, "CENTER", startX + (i - 1) * (w + gap), 0)
-                    elseif growth == "LEFT" then if i == 1 then btn:SetPoint("RIGHT", indAnchor, "RIGHT", -2, 0) else btn:SetPoint("RIGHT", scrollChild.SandboxIndIconsPool[i-1], "LEFT", -gap, 0) end
-                    elseif growth == "RIGHT" then if i == 1 then btn:SetPoint("LEFT", indAnchor, "LEFT", 2, 0) else btn:SetPoint("LEFT", scrollChild.SandboxIndIconsPool[i-1], "RIGHT", gap, 0) end
-                    elseif growth == "UP" then if i == 1 then btn:SetPoint("BOTTOM", indAnchor, "BOTTOM", 0, 2) else btn:SetPoint("BOTTOM", scrollChild.SandboxIndIconsPool[i-1], "TOP", 0, gap) end
-                    elseif growth == "DOWN" then if i == 1 then btn:SetPoint("TOP", indAnchor, "TOP", 0, -2) else btn:SetPoint("TOP", scrollChild.SandboxIndIconsPool[i-1], "BOTTOM", 0, -gap) end end
-                    
-                    local sInfo = nil; pcall(function() sInfo = C_Spell.GetSpellInfo(tonumber(sID)) end)
-                    btn.tex:SetTexture(sInfo and sInfo.iconID or 134400)
-                    
-                    if CDMod.Sandbox.selectedSpellForTracker == tostring(sID) then btn:SetBackdropBorderColor(1, 0.6, 0, 1) else btn:SetBackdropBorderColor(0, 0, 0, 1) end
-                    
-                    btn:SetScript("OnClick", function(self, button)
-                        if button == "RightButton" then
-                            local strID = tostring(sID)
-                            if CDMod.Sandbox.selectedSpellForTracker == strID then CDMod.Sandbox.selectedSpellForTracker = nil else CDMod.Sandbox.selectedSpellForTracker = strID end
-                            CDMod.Sandbox.selectedRow = nil
-                            if WF.UI.UpdateTargetWidth then local startW = WF.MainFrame:GetWidth(); WF.UI:RefreshCurrentPanel(); WF.MainFrame:SetWidth(startW); local targetReq = (CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker) and 1050 or 950; WF.UI:UpdateTargetWidth(targetReq, true) else WF.UI:RefreshCurrentPanel() end
-                        end
-                    end)
-                    btn:SetScript("OnEnter", function() GameTooltip:SetOwner(btn, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(tonumber(sID)); GameTooltip:AddLine(" "); GameTooltip:AddLine(L["Right Click: Tracker"] or "|cffffaa00[右键]|r 设置此技能专属的褪色与发光效果", 1,1,1); GameTooltip:Show() end)
-                    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                    
-                    WF.AuraGlowAPI:ApplyPreview(btn, sID, true)
-                    btn:Show()
-                end
-                currentY = currentY - bgH - 12
-            else
-                if scrollChild.Sandbox_IndAnchor then scrollChild.Sandbox_IndAnchor:Hide() end
-                if scrollChild.SandboxIndIconsPool then for _, b in ipairs(scrollChild.SandboxIndIconsPool) do b:Hide() end end
-            end
+            btn1:SetScript("OnEnter", function() GameTooltip:SetOwner(btn1, "ANCHOR_RIGHT"); GameTooltip:AddLine("原生高亮替换预览"); GameTooltip:AddLine("|cff00ff00[左键]|r 调整原生的发光动画参数", 1,1,1); GameTooltip:Show() end)
+            btn1:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            btn1:SetScript("OnClick", function() 
+                CDMod.Sandbox.selectedRow = nil; CDMod.Sandbox.selectedSpellForTracker = nil; CDMod.Sandbox.selectedTextMode = nil
+                CDMod.Sandbox.selectedGlowMode = "Native"
+                WF.UI:RefreshCurrentPanel()
+            end)
+            glowAnchor.btnNative = btn1
+            
+            local btn2 = CreateFrame("Button", nil, glowAnchor, "BackdropTemplate")
+            btn2:SetSize(45, 45); btn2:SetPoint("RIGHT", glowAnchor, "RIGHT", -15, 0)
+            btn2:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+            btn2:SetBackdropBorderColor(0,0,0,1)
+            local tex2 = btn2:CreateTexture(nil, "BACKGROUND")
+            tex2:SetPoint("TOPLEFT", 1, -1); tex2:SetPoint("BOTTOMRIGHT", -1, 1); tex2:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+            tex2:SetTexture(132369) 
+            btn2.tex = tex2
+            local b2Title = btn2:CreateFontString(nil, "OVERLAY")
+            b2Title:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+            b2Title:SetPoint("TOP", btn2, "BOTTOM", 0, -5)
+            b2Title:SetText("自定义发光")
+            
+            btn2:SetScript("OnEnter", function() GameTooltip:SetOwner(btn2, "ANCHOR_RIGHT"); GameTooltip:AddLine("自定义BUFF发光预览"); GameTooltip:AddLine("|cff00ff00[左键]|r 调整独立的自定义发光引擎参数", 1,1,1); GameTooltip:Show() end)
+            btn2:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            btn2:SetScript("OnClick", function() 
+                CDMod.Sandbox.selectedRow = nil; CDMod.Sandbox.selectedSpellForTracker = nil; CDMod.Sandbox.selectedTextMode = nil
+                CDMod.Sandbox.selectedGlowMode = "Aura"
+                WF.UI:RefreshCurrentPanel()
+            end)
+            glowAnchor.btnAura = btn2
         end
+
+        currentY = currentY - 20
+        glowAnchor:ClearAllPoints()
+        glowAnchor:SetSize(180, 75)
+        glowAnchor:SetPoint("TOP", canvas, "TOP", 0, currentY)
+        glowAnchor:Show()
+
+        glowAnchor.btnNative:SetBackdropBorderColor(CDMod.Sandbox.selectedGlowMode == "Native" and 0 or 0, CDMod.Sandbox.selectedGlowMode == "Native" and 1 or 0, 0, 1)
+        glowAnchor.btnAura:SetBackdropBorderColor(CDMod.Sandbox.selectedGlowMode == "Aura" and 0 or 0, CDMod.Sandbox.selectedGlowMode == "Aura" and 1 or 0, 0, 1)
+        
+        currentY = currentY - 75 - 15
 
         local boxWidth = math.max(10, (forcedWidth or 400) - 20)
         if currentMaxWidth > boxWidth and currentMaxWidth > 0 then
@@ -1109,7 +1161,7 @@ if WF.UI then
         local db = WF.db.cooldownCustom or {}; if not db.Essential then db.Essential = {} end; if not db.Utility then db.Utility = {} end
         WF.UI.MainScrollChild = scrollChild
         
-        local targetWidth = (CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker) and 1050 or 950
+        local targetWidth = (CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker or CDMod.Sandbox.selectedTextMode or CDMod.Sandbox.selectedGlowMode) and 1050 or 950
         ColW = targetWidth / 2.2
         
         local leftColW = 475
@@ -1121,7 +1173,7 @@ if WF.UI then
         
         local help = scrollChild.Sandbox_Help or scrollChild:CreateFontString(nil, "OVERLAY")
         help:SetParent(scrollChild); help:ClearAllPoints(); help:SetPoint("TOPLEFT", leftX, leftY); help:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); help:SetWidth(leftColW); help:SetJustifyH("LEFT")
-        help:SetText("|cff00ccff[排版引擎]|r |cff00ff00[左键]|r单击选中排版；|cffffaa00[右键]|r单击设置专属特效；拖拽图标跨组换绑；点击空白返回全局设置。")
+        help:SetText("|cff00ccff[排版引擎]|r |cff00ff00[左键]|r单击选中排版或发光预览；|cffffaa00[右键]|r单击设置专属特效；点击空白返回全局设置。")
         help:Show(); scrollChild.Sandbox_Help = help
         leftY = leftY - 35
 
@@ -1139,9 +1191,11 @@ if WF.UI then
             bgClick:SetAllPoints()
             bgClick:SetFrameLevel(previewBox:GetFrameLevel())
             bgClick:SetScript("OnClick", function()
-                if CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker then
+                if CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker or CDMod.Sandbox.selectedTextMode or CDMod.Sandbox.selectedGlowMode then
                     CDMod.Sandbox.selectedRow = nil
                     CDMod.Sandbox.selectedSpellForTracker = nil
+                    CDMod.Sandbox.selectedTextMode = nil
+                    CDMod.Sandbox.selectedGlowMode = nil
                     if WF.UI.UpdateTargetWidth then
                         local startW = WF.MainFrame:GetWidth()
                         WF.UI:RefreshCurrentPanel()
@@ -1269,17 +1323,33 @@ if WF.UI then
             
             rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, visualOpts, HandleTrackerChange)
             
+        elseif CDMod.Sandbox.selectedTextMode then
+            if scrollChild.AG_BuffIDBox_BG then scrollChild.AG_BuffIDBox_BG:Hide() end
+            local mode = CDMod.Sandbox.selectedTextMode
+            local prefix = ""
+            local catCfg = db[mode.cat]
+            if mode.cat == "Essential" then prefix = (mode.row == "Row1") and "row1" or "row2" end
+            local keyPrefix = prefix .. (mode.type == "CD" and "Cd" or "Stack")
+            if mode.cat ~= "Essential" then keyPrefix = (mode.type == "CD" and "cd" or "stack") end
+            
+            local textOpts = {
+                { type = "group", key = "sb_text", text = "|cff00ccff文本排版调整|r: " .. (mode.type == "CD" and "倒计时文本" or "层数文本"), childs = {
+                    WF.UI:GetTextOptions(catCfg, keyPrefix, mode.type == "CD" and "冷却/倒计时" or "应用层数", "sb_txt_grp")
+                } }
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, textOpts, HandleCDChange)
+            
         elseif CDMod.Sandbox.selectedRow then
             if scrollChild.AG_BuffIDBox_BG then scrollChild.AG_BuffIDBox_BG:Hide() end
             local rowOpts = {}
             if CDMod.Sandbox.selectedRow == "Row1" then
-                rowOpts = {{ type = "group", key = "sb_r1", text = "|cff00ff00该行排版调整|r: 第一排核心", childs = { { type = "slider", key = "maxPerRow", db = db.Essential, min = 1, max = 20, step = 1, text = L["Max Per Row"] or "每排最大数量" }, { type = "slider", key = "iconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "row1Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "row1Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" }, WF.UI:GetTextOptions(db.Essential, "row1Stack", L["Stack Text"] or "层数", "r1_st"), WF.UI:GetTextOptions(db.Essential, "row1Cd", L["CD Text"] or "冷却文本", "r1_cd") } }}
+                rowOpts = {{ type = "group", key = "sb_r1", text = "|cff00ff00该行排版调整|r: 第一排核心", childs = { { type = "slider", key = "maxPerRow", db = db.Essential, min = 1, max = 20, step = 1, text = L["Max Per Row"] or "每排最大数量" }, { type = "slider", key = "iconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "row1Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "row1Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" } } }}
             elseif CDMod.Sandbox.selectedRow == "Row2" then
-                rowOpts = {{ type = "group", key = "sb_r2", text = "|cff00ff00该行排版调整|r: 第二排核心", childs = { { type = "slider", key = "row2IconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "row2Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "row2Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" }, WF.UI:GetTextOptions(db.Essential, "row2Stack", L["Stack Text"] or "层数", "r2_st"), WF.UI:GetTextOptions(db.Essential, "row2Cd", L["CD Text"] or "冷却文本", "r2_cd") } }}
+                rowOpts = {{ type = "group", key = "sb_r2", text = "|cff00ff00该行排版调整|r: 第二排核心", childs = { { type = "slider", key = "row2IconGap", db = db.Essential, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "row2Width", db = db.Essential, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "row2Height", db = db.Essential, min = 10, max = 100, step = 1, text = L["Height"] or "高度" } } }}
             elseif CDMod.Sandbox.selectedRow == "Utility" then
-                rowOpts = {{ type = "group", key = "sb_u", text = "|cff00ff00该行排版调整|r: 效能组技能", childs = { { type = "slider", key = "iconGap", db = db.Utility, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "width", db = db.Utility, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "height", db = db.Utility, min = 10, max = 100, step = 1, text = L["Height"] or "高度" }, WF.UI:GetTextOptions(db.Utility, "stack", L["Stack Text"] or "层数", "u_st"), WF.UI:GetTextOptions(db.Utility, "cd", L["CD Text"] or "冷却文本", "u_cd") } }}
+                rowOpts = {{ type = "group", key = "sb_u", text = "|cff00ff00该行排版调整|r: 效能组技能", childs = { { type = "slider", key = "iconGap", db = db.Utility, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "width", db = db.Utility, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "height", db = db.Utility, min = 10, max = 100, step = 1, text = L["Height"] or "高度" } } }}
             elseif CDMod.Sandbox.selectedRow == "BuffIcon" then
-                rowOpts = {{ type = "group", key = "sb_bi", text = "|cff00ff00该行排版调整|r: 增益图标", childs = { { type = "slider", key = "iconGap", db = db.BuffIcon, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "width", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "height", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Height"] or "高度" }, WF.UI:GetTextOptions(db.BuffIcon, "stack", L["Stack Text"] or "层数", "bi_st"), WF.UI:GetTextOptions(db.BuffIcon, "cd", L["CD Text"] or "倒计时", "bi_cd") } }}
+                rowOpts = {{ type = "group", key = "sb_bi", text = "|cff00ff00该行排版调整|r: 增益图标", childs = { { type = "slider", key = "iconGap", db = db.BuffIcon, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, { type = "slider", key = "width", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Width"] or "宽度" }, { type = "slider", key = "height", db = db.BuffIcon, min = 10, max = 100, step = 1, text = L["Height"] or "高度" } } }}
             elseif CDMod.Sandbox.selectedRow == "BuffBar" then
                 rowOpts = {{ type = "group", key = "sb_bb", text = "|cff00ff00该行排版调整|r: 增益条", childs = { 
                     { type = "toggle", key = "showIcon", db = db.BuffBar, text = "显示技能图标" },
@@ -1290,29 +1360,14 @@ if WF.UI then
                     { type = "slider", key = "iconGap", db = db.BuffBar, min = 0, max = 50, step = 1, text = L["Icon Gap"] or "间距" }, 
                     { type = "slider", key = "width", db = db.BuffBar, min = 50, max = 400, step = 1, text = "总宽度" }, 
                     { type = "slider", key = "height", db = db.BuffBar, min = 10, max = 100, step = 1, text = "图标大小" }, 
-                    { type = "slider", key = "barHeight", db = db.BuffBar, min = 2, max = 100, step = 1, text = "增益条独立高度" },
-                    WF.UI:GetTextOptions(db.BuffBar, "stack", L["Stack Text"] or "层数", "bb_st"), 
-                    WF.UI:GetTextOptions(db.BuffBar, "cd", L["CD Text"] or "倒计时", "bb_cd") 
+                    { type = "slider", key = "barHeight", db = db.BuffBar, min = 2, max = 100, step = 1, text = "增益条独立高度" }
                 } }}
             end
             rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, rowOpts, HandleCDChange)
-        else
+            
+        elseif CDMod.Sandbox.selectedGlowMode == "Native" then
             if scrollChild.AG_BuffIDBox_BG then scrollChild.AG_BuffIDBox_BG:Hide() end
-            local agDB = WF.db.auraGlow or {}
             local glowDB = WF.db.glow or {}
-            
-            local globalBaseOpts = {
-                { type = "group", key = "cd_global_base", text = "【通用】排版与动画设定", childs = {
-                    { type = "toggle", key = "enable", db = db, text = "启用排版管理模块", requireReload = true },
-                    { type = "dropdown", key = "countFont", db = db, text = "全局数字字体", options = WF.UI.FontOptions },
-                    { type = "color", key = "swipeColor", db = db, text = "默认冷却遮罩颜色" },
-                    { type = "color", key = "activeAuraColor", db = db, text = "激活时冷却遮罩颜色" },
-                    { type = "toggle", key = "reverseSwipe", db = db, text = "反转冷却转圈方向" },
-                    { type = "toggle", key = "enableCustomLayout", db = db.Essential, text = "启用核心爆发分排布局" },
-                    { type = "slider", key = "rowYGap", db = db.Essential, min = 0, max = 50, step = 1, text = "第二排Y轴间距" },
-                }}
-            }
-            
             local nativeGlowOpts = {
                 { type = "group", key = "native_glow_visuals", text = "【原生高亮】暴雪自带发光替换", childs = {
                     { type = "toggle", key = "enable", db = glowDB, text = "启用并接管暴雪原生发光", requireReload = true },
@@ -1326,7 +1381,6 @@ if WF.UI then
                     { type = "color", key = "color", db = glowDB, text = "自定义发光颜色" },
                 }}
             }
-            
             local nChilds = nativeGlowOpts[1].childs
             if glowDB.glowType == "pixel" then
                 table.insert(nChilds, { type = "slider", key = "pixelLines", db = glowDB, min = 1, max = 20, step = 1, text = "发光线条数量" })
@@ -1349,6 +1403,16 @@ if WF.UI then
                 table.insert(nChilds, { type = "slider", key = "procYOffset", db = glowDB, min = -30, max = 30, step = 1, text = "Y轴偏移" })
             end
             
+            local function HandleNativeGlowChange(val)
+                if WF.GlowAPI and WF.GlowAPI.RefreshAll then WF.GlowAPI:RefreshAll() end
+                if CDMod.UpdateSandboxGlows then CDMod:UpdateSandboxGlows() end
+                if val == "UI_REFRESH" or type(val) == "string" then WF.UI:RefreshCurrentPanel() end
+            end
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, nativeGlowOpts, HandleNativeGlowChange)
+
+        elseif CDMod.Sandbox.selectedGlowMode == "Aura" then
+            if scrollChild.AG_BuffIDBox_BG then scrollChild.AG_BuffIDBox_BG:Hide() end
+            local agDB = WF.db.auraGlow or {}
             local auraGlowOpts = {
                 { type = "group", key = "ag_global_visuals", text = "【自定义高亮】BUFF触发高亮引擎", childs = {
                     { type = "toggle", key = "enable", db = agDB, text = "全面启用自定义高亮组件", requireReload = true },
@@ -1362,7 +1426,6 @@ if WF.UI then
                     { type = "color", key = "glowColor", db = agDB, text = "自定义发光颜色" },
                 }}
             }
-            
             local agChilds = auraGlowOpts[1].childs
             if agDB.glowType == "pixel" then
                 table.insert(agChilds, { type = "slider", key = "glowPixelLines", db = agDB, min = 1, max = 20, step = 1, text = "发光线条数量" })
@@ -1374,7 +1437,7 @@ if WF.UI then
             elseif agDB.glowType == "autocast" then
                 table.insert(agChilds, { type = "slider", key = "glowAutocastParticles", db = agDB, min = 1, max = 20, step = 1, text = "粒子数" })
                 table.insert(agChilds, { type = "slider", key = "glowAutocastFrequency", db = agDB, min = -2, max = 2, step = 0.05, text = "运动频率" })
-                table.insert(agChilds, { type = "slider", key = "glowAutocastScale", db = agDB, min = 0.5, max = 3, step = 0.1, text = "整体缩放" })
+                table.insert(agChilds, { type = "slider", key = "glowAutocastScale", db = agDB, min = 0.5, max = 3, step = 0.1, text = "整体缩悉" })
                 table.insert(agChilds, { type = "slider", key = "glowAutocastXOffset", db = agDB, min = -30, max = 30, step = 1, text = "X轴偏移" })
                 table.insert(agChilds, { type = "slider", key = "glowAutocastYOffset", db = agDB, min = -30, max = 30, step = 1, text = "Y轴偏移" })
             elseif agDB.glowType == "button" then
@@ -1411,23 +1474,41 @@ if WF.UI then
                 table.insert(indT, { type = "slider", key = "offsetX", db = agDB.independentText, text = "微调 X 轴偏移", min = -50, max = 50, step = 1 })
                 table.insert(indT, { type = "slider", key = "offsetY", db = agDB.independentText, text = "微调 Y 轴偏移", min = -50, max = 50, step = 1 })
             end
-            
-            local function HandleNativeGlowChange(val)
-                if WF.GlowAPI and WF.GlowAPI.RefreshAll then WF.GlowAPI:RefreshAll() end
-                if CDMod.UpdateSandboxGlows then CDMod:UpdateSandboxGlows() end
-                if val == "UI_REFRESH" or type(val) == "string" then WF.UI:RefreshCurrentPanel() end
-            end
-            
+
             local function HandleAuraGlowChange(val)
                 if WF.AuraGlowAPI and WF.AuraGlowAPI.UpdateGlows then WF.AuraGlowAPI:UpdateGlows(true) end
                 if CDMod.DrawSandboxToUI then CDMod:DrawSandboxToUI() end 
                 if val == "UI_REFRESH" or type(val) == "string" then WF.UI:RefreshCurrentPanel() end
             end
-            
-            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, globalBaseOpts, HandleCDChange)
-            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, nativeGlowOpts, HandleNativeGlowChange)
             rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, auraGlowOpts, HandleAuraGlowChange)
             rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, textOpts, HandleAuraGlowChange)
+
+        else
+            if scrollChild.AG_BuffIDBox_BG then scrollChild.AG_BuffIDBox_BG:Hide() end
+            
+            local globalBaseOpts = {
+                { type = "group", key = "cd_global_base", text = "【通用】排版与全局动画设定", childs = {
+                    { type = "toggle", key = "enable", db = db, text = "启用排版管理模块", requireReload = true },
+                    { type = "dropdown", key = "countFont", db = db, text = "全局数字字体", options = WF.UI.FontOptions },
+                    { type = "color", key = "swipeColor", db = db, text = "默认冷却遮罩颜色" },
+                    { type = "color", key = "activeAuraColor", db = db, text = "激活时冷却遮罩颜色" },
+                    { type = "toggle", key = "reverseSwipe", db = db, text = "反转冷却转圈方向" },
+                    { type = "toggle", key = "enableCustomLayout", db = db.Essential, text = "启用核心爆发分排布局" },
+                    { type = "slider", key = "rowYGap", db = db.Essential, min = 0, max = 50, step = 1, text = "第二排Y轴间距" },
+                }}
+            }
+            rightY = WF.UI:RenderOptionsGroup(scrollChild, rightX, rightY, rightColW, globalBaseOpts, HandleCDChange)
+            
+            local hintTxt = scrollChild.Sandbox_RightHint
+            if not hintTxt then hintTxt = scrollChild:CreateFontString(nil, "OVERLAY"); hintTxt:SetFont(STANDARD_TEXT_FONT, 13, "OUTLINE"); hintTxt:SetTextColor(0.5, 0.5, 0.5); scrollChild.Sandbox_RightHint = hintTxt end
+            hintTxt:SetPoint("TOPLEFT", rightX, rightY - 20)
+            hintTxt:SetText("请在左侧点击排版组、技能图标、悬浮文本\n或底部的发光预览，以显示对应的详细设置。")
+            hintTxt:Show()
+            rightY = rightY - 80
+        end
+
+        if CDMod.Sandbox.selectedRow or CDMod.Sandbox.selectedSpellForTracker or CDMod.Sandbox.selectedTextMode or CDMod.Sandbox.selectedGlowMode then
+            if scrollChild.Sandbox_RightHint then scrollChild.Sandbox_RightHint:Hide() end
         end
 
         return math.min(leftY, rightY), targetWidth

@@ -51,6 +51,16 @@
         "PET_BATTLE_PAD_INDEX",
         "SOUNDKIT",
         "AddonCompartmentFrame",
-        "ColorPickerFrame"
+        "ColorPickerFrame",
+        "PixelUtil",
+        "StaticPopupDialogs",
+        "StaticPopup_Show",
+        "ACCEPT",
+        "CANCEL",
+        "ScrollUtil",
+        "Settings",
+        "MacroFramePortrait",
+        "MacroFrameCloseButton",
+        "MacroFrameInset"
     ]
 }
